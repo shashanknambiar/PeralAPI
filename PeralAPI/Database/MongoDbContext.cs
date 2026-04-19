@@ -1,5 +1,6 @@
 ﻿using MongoDB.Driver;
 using PeralAPI.Models;
+using PeralAPI.Models.Inventory;
 
 namespace PeralAPI.Database
 {
@@ -27,6 +28,15 @@ namespace PeralAPI.Database
         public IMongoCollection<UserNotificationRead> UserNotificationReads =>
             _database.GetCollection<UserNotificationRead>("user_notification_reads");
 
+        public IMongoCollection<ProductModel> Products =>
+            _database.GetCollection<ProductModel>("products");
+
+        public IMongoCollection<VendorModel> Vendors =>
+            _database.GetCollection<VendorModel>("vendors");
+
+        public IMongoCollection<PurchaseOrderModel> PurchaseOrders =>
+            _database.GetCollection<PurchaseOrderModel>("purchase_orders");
+
         private void EnsureIndexes()
         {
             // Unique index on username and email
@@ -53,6 +63,7 @@ namespace PeralAPI.Database
 
             notifIndexes.CreateOne(new CreateIndexModel<Notification>(
                 Builders<Notification>.IndexKeys.Ascending(n => n.UserId)));
+
 
             notifIndexes.CreateOne(new CreateIndexModel<Notification>(
                 Builders<Notification>.IndexKeys.Ascending(n => n.CreatedAt),

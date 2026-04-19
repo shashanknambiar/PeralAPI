@@ -71,7 +71,7 @@
                 UserName = dto.UserName,
                 Email = dto.Email,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
-                AvatarUrl = dto.AvatarUrl,
+                AvatarUrl = dto.AvatarUrl ?? "",
                 Roles = dto.Roles
             };
 

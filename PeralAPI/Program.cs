@@ -6,6 +6,7 @@ using PeralAPI.Database;
 using PeralAPI.Hubs;
 using PeralAPI.Models;
 using PeralAPI.Services;
+using PeralAPI.Services.Inventory;
 using StackExchange.Redis;
 using System.Text;
 
@@ -50,7 +51,7 @@ builder.Services.AddSingleton<JwtService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<NotificationService>();
-
+builder.Services.AddScoped<IInventoryService, InventoryService>();
 // Redis + SignalR
 var redisConnection = builder.Configuration["Redis:ConnectionString"];
 
