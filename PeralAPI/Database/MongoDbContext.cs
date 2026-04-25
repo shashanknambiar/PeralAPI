@@ -1,4 +1,5 @@
-﻿using MongoDB.Driver;
+﻿using MongoDB.Bson;
+using MongoDB.Driver;
 using PeralAPI.Models;
 using PeralAPI.Models.Inventory;
 
@@ -10,12 +11,14 @@ namespace PeralAPI.Database
 
         public MongoDbContext(IConfiguration config)
         {
-            var client = new MongoClient(config["MongoDB:ConnectionString"]);
-            _database = client.GetDatabase(config["MongoDB:DatabaseName"]);
+            Client = new MongoClient(config["MongoDB:ConnectionString"]);
+            _database = Client.GetDatabase(config["MongoDB:DatabaseName"]);
 
             EnsureIndexes();
+            EnsureProductQuantityView();
+            EnsureVendorCreditView();
         }
-
+        public IMongoClient Client { get; }
         public IMongoCollection<User> Users =>
             _database.GetCollection<User>("users");
 
@@ -34,8 +37,16 @@ namespace PeralAPI.Database
         public IMongoCollection<VendorModel> Vendors =>
             _database.GetCollection<VendorModel>("vendors");
 
-        public IMongoCollection<PurchaseOrderModel> PurchaseOrders =>
-            _database.GetCollection<PurchaseOrderModel>("purchase_orders");
+        public IMongoCollection<InventoryOrderModel> InventoryOrders =>
+            _database.GetCollection<InventoryOrderModel>("inventory_orders");
+
+        public IMongoCollection<ProductTransactionLedgerModel> ProductTransactionLedger =>
+            _database.GetCollection<ProductTransactionLedgerModel>("product_transaction_ledger");
+
+        public IMongoCollection<ProductQuantityViewModel> ProductQuantityView =>
+    _database.GetCollection<ProductQuantityViewModel>("product_quantity_view");
+        public IMongoCollection<VendorCreditViewModel> VendorCreditView =>
+    _database.GetCollection<VendorCreditViewModel>("vendor_credit_view");
 
         private void EnsureIndexes()
         {
@@ -81,6 +92,68 @@ namespace PeralAPI.Database
             readIndexes.CreateOne(new CreateIndexModel<UserNotificationRead>(
                 Builders<UserNotificationRead>.IndexKeys.Ascending(r => r.ReadAt),
                 new CreateIndexOptions { ExpireAfter = TimeSpan.FromDays(90) }));
+        }
+
+        private void EnsureProductQuantityView()
+        {
+            var viewName = "product_quantity_view";
+            var existingCollections = _database.ListCollectionNames().ToList();
+
+            if (existingCollections.Contains(viewName))
+                return;
+
+            var pipeline = new[]
+            {
+        new BsonDocument("$group", new BsonDocument
+        {
+            { "_id", "$productId" },
+            { "totalQuantity", new BsonDocument("$sum", "$quantity") }
+        }),
+        new BsonDocument("$project", new BsonDocument
+        {
+            { "_id", 0 },
+            { "productId", "$_id" },
+            { "totalQuantity", 1 }
+        })};
+
+            _database.CreateView(
+                viewName,
+                "product_transaction_ledger",
+                PipelineDefinition<BsonDocument, BsonDocument>.Create(pipeline)
+            );
+        }
+
+        private void EnsureVendorCreditView()
+        {
+            var viewName = "vendor_credit_view";
+            var existingCollections = _database.ListCollectionNames().ToList();
+
+            if (existingCollections.Contains(viewName))
+                return;
+
+            var pipeline = new[]
+            {
+        new BsonDocument("$match", new BsonDocument("status", 1)),
+        new BsonDocument("$group", new BsonDocument
+        {
+            { "_id", "$vendorId" },
+            { "credit", new BsonDocument("$sum", new BsonDocument(
+                "$subtract", new BsonArray { "$paymentInformation.value", "$paymentInformation.amountPaid" }
+            ))}
+        }),
+        new BsonDocument("$project", new BsonDocument
+        {
+            { "_id", 0 },
+            { "vendorId", "$_id" },
+            { "credit", 1 }
+        })
+    };
+
+            _database.CreateView(
+                viewName,
+                "inventory_orders",
+                PipelineDefinition<BsonDocument, BsonDocument>.Create(pipeline)
+            );
         }
     }
 }

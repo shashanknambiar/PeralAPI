@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PeralAPI.Models.DTOs;
+using PeralAPI.Models.Inventory;
 using PeralAPI.Services.Inventory;
 
 namespace PeralAPI.Controllers
@@ -17,7 +18,8 @@ namespace PeralAPI.Controllers
             _inventory = inventory;
         }
 
-        /// <summary>Creates a new vendor. Vendor ID and contact IDs are generated server-side. Requires the "Inventory Manager" role.</summary>
+        #region Vendors
+
         [HttpPost("vendors")]
         [Authorize(Roles = "Inventory Manager")]
         public async Task<IActionResult> CreateVendor([FromBody] CreateVendorDto dto)
@@ -26,29 +28,19 @@ namespace PeralAPI.Controllers
             return CreatedAtAction(nameof(CreateVendor), new { id = created.Id }, created);
         }
 
-        /// <summary>Returns all vendors, paginated. Requires authentication.</summary>
         [HttpGet("vendors")]
         public async Task<IActionResult> GetAllVendors([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
             var vendors = await _inventory.GetAllVendorsAsync(page, pageSize);
-            return Ok(vendors);
+            return Ok(vendors.Select(v => v.ToDto()));
         }
 
-        /// <summary>Searches vendors by name (case-insensitive, partial match), paginated. Requires authentication.</summary>
         [HttpGet("vendors/search")]
-        public async Task<IActionResult> SearchVendors(
-            [FromQuery] string q,
-            [FromQuery] int page = 1,
-            [FromQuery] int pageSize = 20)
+        public async Task<IActionResult> SearchVendors([FromQuery] string searchString = "", [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
-            if (string.IsNullOrWhiteSpace(q))
-                return BadRequest(new { error = "Query parameter 'q' is required." });
-
-            var results = await _inventory.SearchVendorsAsync(q, page, pageSize);
-            return Ok(results);
+            var results = await _inventory.SearchVendorsAsync(searchString, page, pageSize);
+            return Ok(results.Select(v => v.ToDto()));
         }
-
-        /// <summary>Returns a single vendor by ID. Requires authentication.</summary>
         [HttpGet("vendors/{id}")]
         public async Task<IActionResult> GetVendorById(string id)
         {
@@ -57,23 +49,20 @@ namespace PeralAPI.Controllers
             if (vendor is null)
                 return NotFound();
 
-            return Ok(vendor);
+            return Ok(vendor.ToDto());
         }
-
-        /// <summary>Updates a vendor by ID. Contact IDs are regenerated server-side. Requires the "Inventory Manager" role.</summary>
         [HttpPut("vendors/{id}")]
         [Authorize(Roles = "Inventory Manager")]
-        public async Task<IActionResult> UpdateVendor(string id, [FromBody] CreateVendorDto dto)
+        public async Task<IActionResult> UpdateVendor(string id, [FromBody] UpdateVendorDto dto)
         {
             var updated = await _inventory.UpdateVendorAsync(id, dto);
 
             if (updated is null)
                 return NotFound();
-
-            return Ok(updated);
+#warning fetch credit here.
+            return Ok(updated.ToDto());
         }
 
-        /// <summary>Deletes a vendor by ID. Requires the "Inventory Manager" role.</summary>
         [HttpDelete("vendors/{id}")]
         [Authorize(Roles = "Inventory Manager")]
         public async Task<IActionResult> DeleteVendor(string id)
@@ -86,18 +75,27 @@ namespace PeralAPI.Controllers
             return Ok(new { message = "Vendor deleted." });
         }
 
-        /// <summary>Creates a new product. Product ID and vendor IDs are generated server-side. Requires the "Inventory Manager" role.</summary>
+        #endregion
+
+
+
+        #region Products
+
         [HttpPost("products")]
         [Authorize(Roles = "Inventory Manager")]
         public async Task<IActionResult> CreateProduct([FromBody] CreateProductDto dto)
         {
+#warning add a quick search products to avoid creating products with the same name
+#warning check for products with same name.
+#warning check for valid vendors
             var created = await _inventory.CreateProductAsync(dto);
-            return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+            return CreatedAtAction(nameof(GetProduct), new { id = created.Id }, created);
         }
 
-        /// <summary>Updates a product by ID. Vendor IDs are regenerated server-side. Requires the "Inventory Manager" role.</summary>
         [HttpPut("products/{id}")]
         [Authorize(Roles = "Inventory Manager")]
+        [ProducesResponseType(typeof(ProductDto), 200)]
+        [ProducesResponseType(404)]
         public async Task<IActionResult> UpdateProduct(string id, [FromBody] UpdateProductDto dto)
         {
             var updated = await _inventory.UpdateProductAsync(id, dto);
@@ -108,7 +106,6 @@ namespace PeralAPI.Controllers
             return Ok(updated);
         }
 
-        /// <summary>Deletes a product by ID. Requires the "Inventory Manager" role.</summary>
         [HttpDelete("products/{id}")]
         [Authorize(Roles = "Inventory Manager")]
         public async Task<IActionResult> DeleteProduct(string id)
@@ -121,50 +118,122 @@ namespace PeralAPI.Controllers
             return Ok(new { message = "Product deleted." });
         }
 
-        /// <summary>Returns all products, paginated. Requires authentication.</summary>
-        [HttpGet("products")]
-        public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        [HttpGet("products/quick-search")]
+        [Authorize(Roles = "Inventory Manager, Billing")]
+
+        public async Task<List<ProductSummaryDto>> SearchProductSummary(string searchString = "", [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
-            var products = await _inventory.GetAllProductsAsync(page, pageSize);
-            return Ok(products);
+            return (await _inventory.SearchProductAsync(searchString, page, pageSize)).Select(s => s.ToProductSummaryDto()).ToList();
         }
 
-        /// <summary>Returns a single product by ID. Requires authentication.</summary>
+        [HttpGet("products/search")]
+        [Authorize(Roles = "Inventory Manager, Billing")]
+
+        public async Task<List<ProductDto>> SearchProductsAsync(string searchString = "", [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        {
+            var products = await _inventory.SearchProductAsync(searchString, page, pageSize);
+            var vendors = await _inventory.GetVendorByIdAsync(products.SelectMany(p => p.VendorIds).Distinct().ToList());
+#warning Add data from products quantity view
+            var productsDto = products.Select(p =>
+            {
+                var resolvedVendors = vendors.Where(v => p.VendorIds.Contains(v.Id)).ToList();
+                return p.ToDto(resolvedVendors, 0);
+            }).ToList();
+
+            return productsDto;
+
+        }
+        [HttpGet("products")]
+        [Authorize(Roles = "Inventory Manager")]
+        public async Task<List<ProductDto>> GetProduct([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        {
+            var products = await _inventory.SearchProductAsync("", page, pageSize);
+            var vendors = await _inventory.GetVendorByIdAsync(products.SelectMany(p => p.VendorIds).Distinct().ToList());
+#warning Add data from products quantity view
+            var productsDto = products.Select(p =>
+            {
+                var resolvedVendors = vendors.Where(v => p.VendorIds.Contains(v.Id)).ToList();
+                return p.ToDto(resolvedVendors, 0);
+            }).ToList();
+
+            return productsDto;
+        }
+
         [HttpGet("products/{id}")]
-        public async Task<IActionResult> GetById(string id)
+        [Authorize(Roles = "Inventory Manager")]
+        public async Task<IActionResult> GetProduct(string id)
         {
             var product = await _inventory.GetProductByIdAsync(id);
-
-            if (product is null)
-                return NotFound();
-
-            return Ok(product);
+            if (product == null)
+                return NotFound("Product not found.");
+            var vendors = await _inventory.GetVendorByIdAsync(product.VendorIds);
+#warning Add data from products quantity view
+            return Ok(product.ToDto(vendors, 0));
         }
 
-        /// <summary>
-        /// Searches products by name (case-insensitive, partial match), paginated.
-        /// Requires authentication.
-        /// </summary>
-        [HttpGet("products/search")]
-        public async Task<IActionResult> Search(
-            [FromQuery] string q,
-            [FromQuery] int page = 1,
-            [FromQuery] int pageSize = 20)
-        {
-            if (string.IsNullOrWhiteSpace(q))
-                return BadRequest(new { error = "Query parameter 'q' is required." });
+        #endregion
 
-            var results = await _inventory.SearchProductsAsync(q, page, pageSize);
-            return Ok(results);
-        }
 
-        /// <summary>Creates a new purchase order. Order ID, total quantity, and total purchase value are computed server-side. Requires the "Inventory Manager" role.</summary>
-        [HttpPost("purchase-order")]
+        #region Orders
+
+        [HttpPost("orders")]
         [Authorize(Roles = "Inventory Manager")]
-        public async Task<IActionResult> CreatePurchaseOrder([FromBody] CreatePurchaseOrderDto dto)
+        public async Task<IActionResult> CreateInventoryOrder([FromBody] CreateInventoryOrderDto dto)
         {
-            var created = await _inventory.CreatePurchaseOrderAsync(dto);
-            return StatusCode(201, created);
+            {
+                var result = await _inventory.CreateInventoryOrderAsync(dto);
+                return Ok(result);
+            }
+        #endregion
+
+        }
+
+        [HttpPut("orders/change-status/{id}")]
+        [Authorize(Roles = "Inventory Manager")]
+        public async Task<IActionResult> UpdateInventoryOrderStatus(string id, [FromBody] ChangeInventoryOrderStatusDto dto)
+        {
+            var result = await _inventory.ChangeInventoryOrderStatus(dto);
+            if (result == null)
+                return NotFound("Order not found.");
+            return Ok(result);
+        }
+
+        [HttpPut("orders/{id}")]
+        [Authorize(Roles ="Inventory Manager")]
+        public async Task<IActionResult> UpdateInventoryOrder(string id, [FromBody] UpdateInventoryOrderDto dto)
+        {
+            if(id != dto.Id)
+                return BadRequest("ID in URL does not match ID in body.");
+            var result = await _inventory.UpdateInventoryOrderAsync(dto);
+            if (result == null)
+                return NotFound("Order not found.");
+            return Ok(result);
+        }
+
+        [HttpGet("orders/{id}")]
+        [Authorize(Roles = "Inventory Manager")]
+        public async Task<IActionResult> GetInventoryOrderById(string id)
+        {
+            var result = await _inventory.GetInventoryOrderByIdAsync(id);
+            if (result == null)
+                return NotFound("Order not found.");
+            return Ok(result);
+        }
+
+        [HttpGet("orders/search")]
+        [Authorize(Roles = "Inventory Manager")]
+        public async Task<IActionResult> SearchInventoryOrders([FromQuery] string query = "", [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        {
+            var result = await _inventory.SearchInventoryOrdersAsync(query, page, pageSize);
+            return Ok(result);
+        }
+
+        [HttpGet("orders")]
+        [Authorize(Roles = "Inventory Manager")]
+        public async Task<IActionResult> GetInventoryOrders([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        {
+            var result = await _inventory.SearchInventoryOrdersAsync("", page, pageSize);
+            return Ok(result);
         }
     }
 }
