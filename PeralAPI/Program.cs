@@ -4,6 +4,7 @@ using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
 using PeralAPI.Database;
 using PeralAPI.Hubs;
+using PeralAPI.Infrastructure.Swagger;
 using PeralAPI.Models;
 using PeralAPI.Services;
 using PeralAPI.Services.Inventory;
@@ -43,7 +44,13 @@ builder.Services.AddSwaggerGen(options =>
             new string[] {}
         }
     });
+    //options.EnableAnnotations();
+#warning Enable annotations as a improvment
+    options.SupportNonNullableReferenceTypes();
+    options.UseAllOfToExtendReferenceSchemas();    
+    options.SchemaFilter<RequireNonNullablePropertiesSchemaFilter>();
 });
+
 
 // Services
 builder.Services.AddSingleton<MongoDbContext>();
@@ -124,7 +131,10 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Middleware
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseCors("AllowReactApp");
 

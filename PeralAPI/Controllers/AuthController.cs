@@ -13,7 +13,7 @@ namespace PeralAPI.Controllers
         public AuthController(AuthService auth) => _auth = auth;
 
         [HttpPost("login")]
-        public async Task<IActionResult> Login(LoginDto dto)
+        public async Task<ActionResult<AuthResponseDto>> Login(LoginDto dto)
         {
             var (result, error) = await _auth.LoginAsync(dto);
             if (result == null) return Unauthorized(new { error });
@@ -21,7 +21,7 @@ namespace PeralAPI.Controllers
         }
 
         [HttpPost("refresh")]
-        public async Task<IActionResult> Refresh(RefreshTokenDto dto)
+        public async Task<ActionResult<AuthResponseDto>> Refresh(RefreshTokenDto dto)
         {
             var result = await _auth.RefreshAsync(dto.RefreshToken);
             if (result == null) return Unauthorized(new { error = "Invalid or expired refresh token." });

@@ -77,7 +77,7 @@ namespace PeralAPI.Services.Inventory
             return result.ModifiedCount > 0;
         }
 
-        public async Task<List<VendorModel>> GetAllVendorsAsync(int page, int pageSize)
+        public async Task<List<VendorModel>> GetVendorsAsync(int page, int pageSize)
         {
             return await _db.Vendors
                 .Find(Builders<VendorModel>.Filter.Empty
@@ -94,7 +94,20 @@ namespace PeralAPI.Services.Inventory
                 & Builders<VendorModel>.Filter.Eq(v => v.IsDeleted, false))
                 .FirstOrDefaultAsync();
         }
+        public async Task<VendorModel?> GetAllVendorByIdAsync(string id)
+        {
+            return await _db.Vendors
+                .Find(Builders<VendorModel>.Filter.Eq(v => v.Id, id))
+                .FirstOrDefaultAsync();
+        }
         public async Task<List<VendorModel>> GetVendorByIdAsync(List<string> ids)
+        {
+            return await _db.Vendors
+                .Find(Builders<VendorModel>.Filter.In(v => v.Id, ids) 
+                & Builders<VendorModel>.Filter.Eq(v => v.IsDeleted, false))
+                .ToListAsync();
+        }
+        public async Task<List<VendorModel>> GetAllVendorByIdAsync(List<string> ids)
         {
             return await _db.Vendors
                 .Find(Builders<VendorModel>.Filter.In(v => v.Id, ids))
@@ -178,6 +191,18 @@ namespace PeralAPI.Services.Inventory
             return await _db.Products
                 .Find(Builders<ProductModel>.Filter.Eq(p => p.Id, id) & Builders<ProductModel>.Filter.Eq(p => p.IsDeleted, false))
                 .FirstOrDefaultAsync();
+        }
+        public async Task<List<ProductModel>> GetProductByIdsAsync(List<string> ids)
+        {
+            return await _db.Products
+                .Find(Builders<ProductModel>.Filter.In(p => p.Id, ids) & Builders<ProductModel>.Filter.Eq(p => p.IsDeleted, false))
+                .ToListAsync();
+        }
+        public async Task<List<ProductModel>> GetAllProductByIdsAsync(List<string> ids)
+        {
+            return await _db.Products
+                .Find(Builders<ProductModel>.Filter.In(p => p.Id, ids))
+                .ToListAsync();
         }
         #endregion
 

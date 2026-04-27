@@ -1,6 +1,6 @@
 ﻿namespace PeralAPI.Models.DTOs
 {
-    public record RegisterDto(
+    public record CreateUserDto(
      string UserName,
      string Email,
      string Password,
@@ -42,6 +42,7 @@
     );
 
     public record UpdateUserDto(
+        string Id,
         string UserName,
         List<string> Roles,
         bool ChangePassword,

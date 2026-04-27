@@ -88,6 +88,17 @@ namespace PeralAPI.Models.Inventory
                 model.Name
             );
         }
+
+        public static PurchaseItemDto ToPurchaseItemDto(this ProductModel model, string productName, int quantity, int pricePerItem)
+        {
+            return new PurchaseItemDto(
+                model.Id,
+                productName,
+                quantity,
+                pricePerItem
+            );
+        }
+
         public static ProductDto ToDto(this ProductModel model, List<VendorModel> vendorModels, int quantityInInventory)
         {
             return new ProductDto(

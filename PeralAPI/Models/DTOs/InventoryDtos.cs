@@ -70,7 +70,9 @@ namespace PeralAPI.Models.DTOs
         List<PurchaseItemDto> Products,
         List<ActionDto> Actions,
         InventoryOrderStatus Status,
-        PaymentInformationDto PaymentInformation
+        PaymentInformationDto PaymentInformation,
+        DateTime OrderCreatedOn,
+        DateTime OrderClosedOn
     );
     public record CreateInventoryOrderDto(
         string VendorId,

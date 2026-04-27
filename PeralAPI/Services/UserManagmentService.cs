@@ -55,16 +55,16 @@
             return (true, string.Empty);
         }
 
-        public async Task<(bool Success, string Error)> RegisterAsync(RegisterDto dto)
+        public async Task<(bool Success, string Error, User? user)> RegisterAsync(CreateUserDto dto)
         {
             if (dto.UserName.Equals("Admin", StringComparison.OrdinalIgnoreCase))
-                return (false, "The username 'Admin' is reserved.");
+                return (false, "The username 'Admin' is reserved.", null);
 
             var (isValid, error) = PasswordValidator.Validate(dto.Password);
-            if (!isValid) return (false, error);
+            if (!isValid) return (false, error, null);
 
             var exists = await _db.Users.Find(u => u.UserName == dto.UserName).AnyAsync();
-            if (exists) return (false, "Username already taken.");
+            if (exists) return (false, "Username already taken.", null);
 
             var user = new User
             {
@@ -76,7 +76,7 @@
             };
 
             await _db.Users.InsertOneAsync(user);
-            return (true, string.Empty);
+            return (true, string.Empty, user);
         }
 
         public async Task<(bool Success, string Error)> UpdateAsync(string userId, UpdateUserDto dto)

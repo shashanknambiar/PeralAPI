@@ -1,5 +1,6 @@
 ﻿using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
+using PeralAPI.Models.DTOs;
 
 namespace PeralAPI.Models.Inventory
 {
@@ -71,5 +72,39 @@ namespace PeralAPI.Models.Inventory
         public string PerformedBy { get; set; } = null!;
         [BsonElement("remarks")]
         public string Remarks { get; set; } = null!;
+    }
+
+    public static class InventoryOrderModelExtensions
+    {
+        public static InventoryOrderDto ToDto(this InventoryOrderModel model, VendorDto Vendor, List<PurchaseItemDto> Products)
+        {
+            return new InventoryOrderDto(
+                model.Id, 
+                Vendor, 
+                Products, 
+                model.Actions.Select(s => s.ToDto()).ToList(),
+                model.Status,
+                model.PaymentInformation.ToDto(), 
+                model.OrderCreatedOn, 
+                model.OrderClosedOn);
+        }
+
+        public static PaymentInformationDto ToDto(this PaymentInformationModel model)
+        {
+            return new PaymentInformationDto(
+                model.Value,
+                model.AmountPaid,
+                model.PaymentDate,
+                model.AccountNumber,
+                model.PaymentMethod,
+                model.ReferenceNumber,
+                model.Attachment
+            );
+        }
+
+        public static ActionDto ToDto(this ActionModel model)
+        {
+            return new ActionDto(model.ActionType, model.TimeStamp, model.PerformedBy, model.Remarks);
+        }
     }
 }
