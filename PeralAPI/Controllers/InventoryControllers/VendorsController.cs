@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using PeralAPI.Models.DTOs;
 using PeralAPI.Models.Inventory;
@@ -23,21 +22,35 @@ namespace PeralAPI.Controllers.InventoryControllers
         public async Task<ActionResult<VendorDto>> CreateVendor([FromBody] CreateVendorDto dto)
         {
             var created = await _inventory.CreateVendorAsync(dto);
-            return CreatedAtAction(nameof(CreateVendor), new { id = created.Id }, created);
+            var vendorCredit = await _inventory.GetVendorCreditByIdAsync(new List<string> { created.Id });
+            vendorCredit.TryGetValue(created.Id, out var credit);
+            return CreatedAtAction(nameof(CreateVendor), new { id = created.Id }, created.ToDto(credit));
         }
 
         [HttpGet]
         public async Task<ActionResult<IEnumerable<VendorDto>?>> GetAllVendors([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
             var vendors = await _inventory.GetVendorsAsync(page, pageSize);
-            return Ok(vendors.Select(v => v.ToDto()));
+            var vendorCredit = await _inventory.GetVendorCreditByIdAsync(vendors.Select(s=> s.Id).ToList());
+            
+            return Ok(vendors.Select(v =>
+            {
+                vendorCredit.TryGetValue(v.Id, out var credit);
+                return v.ToDto(credit);
+            }).ToList());
         }
 
         [HttpGet("search")]
         public async Task<ActionResult<IEnumerable<VendorDto>?>> SearchVendors([FromQuery] string searchString = "", [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
-            var results = await _inventory.SearchVendorsAsync(searchString, page, pageSize);
-            return Ok(results.Select(v => v.ToDto()));
+            var vendors = await _inventory.SearchVendorsAsync(searchString, page, pageSize);
+            var vendorCredit = await _inventory.GetVendorCreditByIdAsync(vendors.Select(s => s.Id).ToList());
+
+            return Ok(vendors.Select(v =>
+            {
+                vendorCredit.TryGetValue(v.Id, out var credit);
+                return v.ToDto(credit);
+            }).ToList());
         }
         [HttpGet("{id}")]
         public async Task<ActionResult<VendorDto?>> GetVendorById(string id)
@@ -46,8 +59,9 @@ namespace PeralAPI.Controllers.InventoryControllers
 
             if (vendor is null)
                 return NotFound();
-
-            return Ok(vendor.ToDto());
+            var vendorCredit = await _inventory.GetVendorCreditByIdAsync(new List<string> { vendor.Id });
+            vendorCredit.TryGetValue(vendor.Id, out var credit);
+            return Ok(vendor.ToDto(credit));
         }
         [HttpPut("{id}")]
         [Authorize(Roles = "Inventory Manager")]
@@ -57,16 +71,23 @@ namespace PeralAPI.Controllers.InventoryControllers
 
             if (updated is null)
                 return NotFound();
-#warning fetch credit here.
-            return Ok(updated.ToDto());
+            var vendorCredit = await _inventory.GetVendorCreditByIdAsync(new List<string> { updated.Id });
+            vendorCredit.TryGetValue(updated.Id, out var credit);
+            return Ok(updated.ToDto(credit));
         }
 
         [HttpDelete("{id}")]
         [Authorize(Roles = "Inventory Manager")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)]
         public async Task<ActionResult> DeleteVendor(string id)
         {
+            var creditDict = await _inventory.GetVendorCreditByIdAsync(new List<string> { id });
+            creditDict.TryGetValue(id, out var credit);
+            if (credit != 0)
+                return Conflict("Vendor account is not settled.");
+
             var deleted = await _inventory.DeleteVendorAsync(id);
 
             if (!deleted)

@@ -10,6 +10,7 @@ using PeralAPI.Services;
 using PeralAPI.Services.Inventory;
 using StackExchange.Redis;
 using System.Text;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -47,7 +48,8 @@ builder.Services.AddSwaggerGen(options =>
     //options.EnableAnnotations();
 #warning Enable annotations as a improvment
     options.SupportNonNullableReferenceTypes();
-    options.UseAllOfToExtendReferenceSchemas();    
+    options.UseAllOfToExtendReferenceSchemas();
+    options.UseInlineDefinitionsForEnums();
     options.SchemaFilter<RequireNonNullablePropertiesSchemaFilter>();
 });
 
@@ -59,6 +61,13 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(
+            new JsonStringEnumConverter()
+        );
+    });
 // Redis + SignalR
 var redisConnection = builder.Configuration["Redis:ConnectionString"];
 

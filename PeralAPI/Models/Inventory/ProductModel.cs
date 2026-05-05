@@ -34,8 +34,7 @@ namespace PeralAPI.Models.Inventory
 
     public class ProductQuantityViewModel
     {
-        [BsonId]
-        [BsonRepresentation(BsonType.ObjectId)]
+        [BsonElement("productId")]
         public string ProductId { get; set; } = null!;
         [BsonElement("totalQuantity")]
         public int TotalQuantity { get; set; }

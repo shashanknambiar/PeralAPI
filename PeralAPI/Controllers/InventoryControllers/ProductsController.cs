@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using PeralAPI.Models.DTOs;
 using PeralAPI.Models.Inventory;
@@ -28,8 +29,9 @@ namespace PeralAPI.Controllers.InventoryControllers
 #warning check for valid vendors
             var created = await _inventory.CreateProductAsync(dto);
             var vendors = await _inventory.GetVendorByIdAsync(created.VendorIds);
-#warning Add data from products quantity view
-            return CreatedAtAction(nameof(GetProduct), new { id = created.Id }, created.ToDto(vendors, 0));
+            var quantity = await _inventory.GetProductStockByIdsAsync(new List<string> { created.Id });
+            quantity.TryGetValue(created.Id, out var stock);
+            return CreatedAtAction(nameof(GetProduct), new { id = created.Id }, created.ToDto(vendors, stock));
         }
 
         [HttpPut("{id}")]
@@ -43,8 +45,9 @@ namespace PeralAPI.Controllers.InventoryControllers
             if (updated is null)
                 return NotFound();
             var vendors = await _inventory.GetVendorByIdAsync(updated.VendorIds);
-#warning Add data from products quantity view
-            return Ok(updated.ToDto(vendors, 0));
+            var quantity = await _inventory.GetProductStockByIdsAsync(new List<string> { updated.Id });
+            quantity.TryGetValue(updated.Id, out var stock);
+            return Ok(updated.ToDto(vendors, stock));
         }
 
         [HttpDelete("{id}")]
@@ -72,18 +75,24 @@ namespace PeralAPI.Controllers.InventoryControllers
         [HttpGet("search")]
         [Authorize(Roles = "Inventory Manager, Billing")]
 
-        public async Task<List<ProductDto>> SearchProductsAsync(string searchString = "", [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        public async Task<ActionResult<List<ProductDto>>> SearchProductsAsync(string searchString = "", [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
             var products = await _inventory.SearchProductAsync(searchString, page, pageSize);
-            var vendors = await _inventory.GetVendorByIdAsync(products.SelectMany(p => p.VendorIds).Distinct().ToList());
-#warning Add data from products quantity view
+            var productIds = products.Select(p => p.Id).ToList();
+            var vendorIds = products.SelectMany(s => s.VendorIds).ToList();
+            var vendorsTask = _inventory.GetVendorByIdAsync(vendorIds);
+            var quantityTask = _inventory.GetProductStockByIdsAsync(productIds);
+            Task.WaitAll(vendorsTask, quantityTask);
+            var vendors = vendorsTask.Result;
+            var quantity = quantityTask.Result;
             var productsDto = products.Select(p =>
             {
                 var resolvedVendors = vendors.Where(v => p.VendorIds.Contains(v.Id)).ToList();
-                return p.ToDto(resolvedVendors, 0);
+                quantity.TryGetValue(p.Id, out var stock);
+                return p.ToDto(resolvedVendors, stock);
             }).ToList();
 
-            return productsDto;
+            return Ok(productsDto);
 
         }
         [HttpGet()]
@@ -91,12 +100,18 @@ namespace PeralAPI.Controllers.InventoryControllers
         public async Task<ActionResult<List<ProductDto>>> GetProduct([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
             var products = await _inventory.SearchProductAsync("", page, pageSize);
-            var vendors = await _inventory.GetVendorByIdAsync(products.SelectMany(p => p.VendorIds).Distinct().ToList());
-#warning Add data from products quantity view
+            var productIds = products.Select(p => p.Id).ToList();
+            var vendorIds  = products.SelectMany(s => s.VendorIds).ToList();
+            var vendorsTask =  _inventory.GetVendorByIdAsync(vendorIds);
+            var quantityTask =  _inventory.GetProductStockByIdsAsync(productIds);
+            Task.WaitAll(vendorsTask, quantityTask);
+            var vendors = vendorsTask.Result;
+            var quantity = quantityTask.Result;
             var productsDto = products.Select(p =>
             {
                 var resolvedVendors = vendors.Where(v => p.VendorIds.Contains(v.Id)).ToList();
-                return p.ToDto(resolvedVendors, 0);
+                quantity.TryGetValue(p.Id, out var stock);
+                return p.ToDto(resolvedVendors, stock);
             }).ToList();
 
             return Ok(productsDto);
@@ -110,8 +125,9 @@ namespace PeralAPI.Controllers.InventoryControllers
             if (product == null)
                 return NotFound("Product not found.");
             var vendors = await _inventory.GetVendorByIdAsync(product.VendorIds);
-#warning Add data from products quantity view
-            return Ok(product.ToDto(vendors, 0));
+            var quantity = await _inventory.GetProductStockByIdsAsync(new List<string> { product.Id });
+            quantity.TryGetValue(product.Id, out var stock);
+            return Ok(product.ToDto(vendors, stock));
         }
 
     }

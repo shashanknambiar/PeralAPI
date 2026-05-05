@@ -78,6 +78,7 @@ namespace PeralAPI.Models.DTOs
         string VendorId,
         List<ProductIdAndQuantity> ProductInfos,
         PaymentInformationDto PaymentInformation,
+        bool IsPlaced,
         string Remarks
     );
     public record UpdateInventoryOrderDto(string Id,
@@ -86,21 +87,33 @@ namespace PeralAPI.Models.DTOs
         PaymentInformationDto PaymentInformation,
         string Remarks);
     public record ChangeInventoryOrderStatusDto(string Id, InventoryOrderStatus Status, string Remarks);
-    public record ProductIdAndQuantity(string ProductId, int Quantity, int PricePerItem);
+    public record ProductIdAndQuantity(string ProductId, int Quantity, decimal PricePerItem);
     public record PaymentInformationDto(
-        int Value,  
-        int AmountPaid, 
-        DateTime PaymentDate, 
-        string AccountNumber, 
-        string PaymentMethod, 
-        string ReferenceNumber, 
+        decimal Value,
+        decimal AmountPaid,
+        DateTime PaymentDate,
+        string AccountNumber,
+        string PaymentMethod,
+        string ReferenceNumber,
         byte[]? Attachment);
     public record PurchaseItemDto(string ProductId,
     string ProductName,
     int Quantity,
-    int PricePerItem);
+    decimal PricePerItem);
 
     public record ActionDto(string ActionType, DateTime ActionDate, string PerformedBy, string Remarks);
+
+    public record OrdersSearchResultDto(
+        int CurrentPage,
+        int TotalPages,
+        List<InventoryOrderDto> Orders);
+
+    public record OrderSearchParamsDto(
+        string? OrderId = null,
+        string? VendorName = null,
+        InventoryOrderStatus? Status = null,
+        DateTime? FromDate = null,
+        DateTime? ToDate = null);
 
     /*
      *Prdoduct Transaction Ledger DTO

@@ -6,6 +6,7 @@ namespace PeralAPI.Models.Inventory
 {
     public enum InventoryOrderStatus
     {
+        Draft,
         Placed,
         Completed,
         Cancelled,
@@ -35,9 +36,11 @@ namespace PeralAPI.Models.Inventory
     public class PaymentInformationModel
     {
         [BsonElement("value")]
-        public int Value { get; set; }
+        [BsonRepresentation(BsonType.Decimal128)]
+        public decimal Value { get; set; }
         [BsonElement("amountPaid")]
-        public int AmountPaid { get; set; }
+        [BsonRepresentation(BsonType.Decimal128)]
+        public decimal AmountPaid { get; set; }
         [BsonElement("paymentMethod")]
         public string PaymentMethod { get; set; } = null!;
         [BsonElement("paymentDate")]
@@ -59,7 +62,8 @@ namespace PeralAPI.Models.Inventory
         [BsonElement("quantity")]
         public int Quantity { get; set; }
         [BsonElement("purchaseValue")]
-        public int PricePerItem { get; set; }
+        [BsonRepresentation(BsonType.Decimal128)]
+        public decimal PricePerItem { get; set; }
     }
 
     public class ActionModel

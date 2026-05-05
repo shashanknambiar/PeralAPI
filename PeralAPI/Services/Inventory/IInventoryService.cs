@@ -17,6 +17,7 @@ namespace PeralAPI.Services.Inventory
         Task<List<VendorModel>> GetVendorByIdAsync(List<string> ids);
         Task<List<VendorModel>> GetAllVendorByIdAsync(List<string> ids);
         Task<List<VendorModel>> SearchVendorsAsync(string query, int page, int pageSize);
+        Task<Dictionary<string, int>> GetVendorCreditByIdAsync(List<string> ids);
 
         #endregion
 
@@ -28,13 +29,15 @@ namespace PeralAPI.Services.Inventory
         Task<ProductModel?> GetProductByIdAsync(string id);
         Task<List<ProductModel>> GetAllProductByIdsAsync(List<string> ids);
         Task<List<ProductModel>> GetProductByIdsAsync(List<string> ids);
+        Task<Dictionary<string, int>> GetProductStockByIdsAsync(List<string> ids);
         #endregion
 
         #region Order Services
         Task<InventoryOrderModel> CreateInventoryOrderAsync(CreateInventoryOrderDto dto);
         Task<InventoryOrderModel> ChangeInventoryOrderStatus(ChangeInventoryOrderStatusDto dto);
         Task<InventoryOrderModel> UpdateInventoryOrderAsync(UpdateInventoryOrderDto dto);
-        Task<List<InventoryOrderModel>> SearchInventoryOrdersAsync(string query, int page, int pageSize);
+        Task<bool> DeleteInventoryOrderAsync(string id);
+        Task<(List<InventoryOrderModel> Orders, long TotalCount)> SearchInventoryOrdersAsync(OrderSearchParamsDto searchParams, int page, int pageSize);
         Task<InventoryOrderModel?> GetInventoryOrderByIdAsync(string id);
         #endregion
 

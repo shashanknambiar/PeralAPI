@@ -31,8 +31,7 @@ namespace PeralAPI.Models.Inventory
 
     public class VendorCreditViewModel
     {
-        [BsonId]
-        [BsonRepresentation(BsonType.ObjectId)]
+        [BsonElement("vendorId")]
         public string VendorId { get; set; } = null!;
         [BsonElement("credit")]
         public int Credit { get; set; }

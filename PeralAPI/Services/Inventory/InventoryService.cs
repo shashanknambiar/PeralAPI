@@ -25,6 +25,7 @@ namespace PeralAPI.Services.Inventory
          * GetVendorByIdAsync
          * GetVendorByIdAsync(List<string> ids)
          * SearchVendorAsync
+         * GetVendorCreditByIdAsync
          */
 
         #region Vendor Services
@@ -126,6 +127,14 @@ namespace PeralAPI.Services.Inventory
                 .ToListAsync();
         }
 
+        public async Task<Dictionary<string, int>> GetVendorCreditByIdAsync(List<string> ids)
+        {
+            var creditData = await _db.VendorCreditView
+                .Find(Builders<VendorCreditViewModel>.Filter.In(c => c.VendorId, ids))
+                .ToListAsync();
+            return creditData.ToDictionary(c => c.VendorId, c => c.Credit);
+        }
+
         #endregion
 
 
@@ -137,6 +146,8 @@ namespace PeralAPI.Services.Inventory
          * SearchProductsSummaryAsync
          * SearchProductsAsync
          * GetProductByIdAsync
+         * GetProductByIdsAsync
+         * GetProductStockByIdsAsync
          */
 
         #region Product Services
@@ -204,6 +215,13 @@ namespace PeralAPI.Services.Inventory
                 .Find(Builders<ProductModel>.Filter.In(p => p.Id, ids))
                 .ToListAsync();
         }
+        public async Task<Dictionary<string, int>> GetProductStockByIdsAsync(List<string> ids)
+        {
+            var stockData = await _db.ProductQuantityView
+                .Find(Builders<ProductQuantityViewModel>.Filter.In(s => s.ProductId, ids))
+                .ToListAsync();
+            return stockData.ToDictionary(s => s.ProductId, s => s.TotalQuantity);
+        }
         #endregion
 
         /*
@@ -232,7 +250,7 @@ namespace PeralAPI.Services.Inventory
                     Quantity = i.Quantity,
                     PricePerItem = i.PricePerItem
                 }).ToList(),
-                Status = InventoryOrderStatus.Placed,
+                Status =  dto.IsPlaced ? InventoryOrderStatus.Placed  : InventoryOrderStatus.Draft,
                 OrderCreatedOn = DateTime.Now,
                 OrderClosedOn = DateTime.MinValue,
                 PaymentInformation = new PaymentInformationModel
@@ -282,7 +300,7 @@ namespace PeralAPI.Services.Inventory
             long modifiedCount = 0;
             if (dto.Status == InventoryOrderStatus.Completed || dto.Status == InventoryOrderStatus.Cancelled || dto.Status == InventoryOrderStatus.RolledBack)
             {
-                update.Set(o => o.OrderClosedOn, DateTime.UtcNow);
+                update = update.Set(o => o.OrderClosedOn, DateTime.UtcNow);
             }
             if(dto.Status == InventoryOrderStatus.Completed)
             {
@@ -388,33 +406,77 @@ namespace PeralAPI.Services.Inventory
             return result.ModifiedCount > 0 ? order : throw new Exception("Failed to update inventory order.");
         }
 
-#warning Change search to support searching by vendor name, product name, order ID and order Date.
-        public async Task<List<InventoryOrderModel>> SearchInventoryOrdersAsync(string query, int page, int pageSize)
+        public async Task<(List<InventoryOrderModel> Orders, long TotalCount)> SearchInventoryOrdersAsync(OrderSearchParamsDto searchParams, int page, int pageSize)
         {
-            FilterDefinition<InventoryOrderModel> filter;
+            var filters = new List<FilterDefinition<InventoryOrderModel>>();
 
-            if (string.IsNullOrWhiteSpace(query))
+            if (!string.IsNullOrWhiteSpace(searchParams.OrderId))
             {
-                filter = Builders<InventoryOrderModel>.Filter.Empty;
-                page = 1;
-            }
-            else
-            {
-                var regex = new BsonRegularExpression(query, "i");
-                filter = Builders<InventoryOrderModel>.Filter.Regex(o => o.Id, regex);
+                var regex = new BsonRegularExpression(searchParams.OrderId, "i");
+                filters.Add(Builders<InventoryOrderModel>.Filter.Regex(o => o.Id, regex));
             }
 
-            return await _db.InventoryOrders
+            if (!string.IsNullOrWhiteSpace(searchParams.VendorName))
+            {
+                var vendorRegex = new BsonRegularExpression(searchParams.VendorName, "i");
+                var matchingVendorIds = await _db.Vendors
+                    .Find(Builders<VendorModel>.Filter.Regex(v => v.Name, vendorRegex)
+                        & Builders<VendorModel>.Filter.Eq(v => v.IsDeleted, false))
+                    .Project(v => v.Id)
+                    .ToListAsync();
+
+                if (matchingVendorIds.Count == 0)
+                    return (new List<InventoryOrderModel>(), 0);
+
+                filters.Add(Builders<InventoryOrderModel>.Filter.In(o => o.VendorId, matchingVendorIds));
+            }
+
+            if (searchParams.Status.HasValue)
+            {
+                filters.Add(Builders<InventoryOrderModel>.Filter.Eq(o => o.Status, searchParams.Status.Value));
+            }
+
+            if (searchParams.FromDate.HasValue)
+            {
+                filters.Add(Builders<InventoryOrderModel>.Filter.Gte(o => o.OrderCreatedOn, searchParams.FromDate.Value.ToUniversalTime()));
+            }
+
+            if (searchParams.ToDate.HasValue)
+            {
+                filters.Add(Builders<InventoryOrderModel>.Filter.Lte(o => o.OrderCreatedOn, searchParams.ToDate.Value.ToUniversalTime()));
+            }
+
+            var filter = filters.Count > 0
+                ? Builders<InventoryOrderModel>.Filter.And(filters)
+                : Builders<InventoryOrderModel>.Filter.Empty;
+
+            var countTask = _db.InventoryOrders.CountDocumentsAsync(filter);
+            var ordersTask = _db.InventoryOrders
                 .Find(filter)
+                .SortByDescending(o => o.OrderCreatedOn)
                 .Skip((page - 1) * pageSize)
                 .Limit(pageSize)
                 .ToListAsync();
+
+            await Task.WhenAll(countTask, ordersTask);
+            return (ordersTask.Result, countTask.Result);
         }
         public async Task<InventoryOrderModel?> GetInventoryOrderByIdAsync(string id)
         {
             return await _db.InventoryOrders
                 .Find(Builders<InventoryOrderModel>.Filter.Eq(p => p.Id, id))
                 .FirstOrDefaultAsync();
+        }
+
+        public async Task<bool> DeleteInventoryOrderAsync(string id)
+        {
+            var order = await GetInventoryOrderByIdAsync(id);
+            if (order == null) return false;
+            if (order.Status != InventoryOrderStatus.Draft)
+                throw new InvalidOperationException("Only Draft orders can be deleted.");
+            var result = await _db.InventoryOrders.DeleteOneAsync(
+                Builders<InventoryOrderModel>.Filter.Eq(o => o.Id, id));
+            return result.DeletedCount > 0;
         }
 
         private static void ValidateInventoryOrderStatus(InventoryOrderStatus status)
