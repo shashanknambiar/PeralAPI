@@ -1,4 +1,5 @@
-﻿using MongoDB.Bson;
+﻿using System.Security.Authentication;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using PeralAPI.Models;
 using PeralAPI.Models.Billing;
@@ -12,7 +13,9 @@ namespace PeralAPI.Database
 
         public MongoDbContext(IConfiguration config)
         {
-            Client = new MongoClient(config["MongoDB:ConnectionString"]);
+            var mongoSettings = MongoClientSettings.FromConnectionString(config["MongoDB:ConnectionString"]);
+            mongoSettings.SslSettings = new SslSettings { EnabledSslProtocols = SslProtocols.Tls12 };
+            Client = new MongoClient(mongoSettings);
             _database = Client.GetDatabase(config["MongoDB:DatabaseName"]);
 
             EnsureIndexes();
