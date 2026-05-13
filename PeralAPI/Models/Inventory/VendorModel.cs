@@ -12,6 +12,10 @@ namespace PeralAPI.Models.Inventory
         
         [BsonElement("isDeleted")]
         public bool IsDeleted { get; set; } = false;
+
+        [BsonElement("isReserved")]
+        public bool IsReserved { get; set; } = false;
+
         [BsonElement("name")]
         public string Name { get; set; } = null!;
 

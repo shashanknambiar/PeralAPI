@@ -67,6 +67,10 @@ namespace PeralAPI.Controllers.InventoryControllers
         [Authorize(Roles = "Inventory Manager")]
         public async Task<ActionResult<VendorDto?>> UpdateVendor(string id, [FromBody] UpdateVendorDto dto)
         {
+            var existing = await _inventory.GetVendorByIdAsync(id);
+            if (existing?.IsReserved == true)
+                return Conflict("Reserved vendors cannot be modified.");
+
             var updated = await _inventory.UpdateVendorAsync(id, dto);
 
             if (updated is null)
@@ -83,6 +87,10 @@ namespace PeralAPI.Controllers.InventoryControllers
         [ProducesResponseType(StatusCodes.Status409Conflict)]
         public async Task<ActionResult> DeleteVendor(string id)
         {
+            var existing = await _inventory.GetVendorByIdAsync(id);
+            if (existing?.IsReserved == true)
+                return Conflict("Reserved vendors cannot be deleted.");
+
             var creditDict = await _inventory.GetVendorCreditByIdAsync(new List<string> { id });
             creditDict.TryGetValue(id, out var credit);
             if (credit != 0)

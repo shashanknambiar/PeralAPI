@@ -6,7 +6,10 @@ using PeralAPI.Database;
 using PeralAPI.Hubs;
 using PeralAPI.Infrastructure.Swagger;
 using PeralAPI.Models;
+using PeralAPI.Models.Inventory;
 using PeralAPI.Services;
+using PeralAPI.Services.Billing;
+using PeralAPI.Services.Dashboard;
 using PeralAPI.Services.Inventory;
 using StackExchange.Redis;
 using System.Text;
@@ -55,12 +58,16 @@ builder.Services.AddSwaggerGen(options =>
 
 
 // Services
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<MongoDbContext>();
 builder.Services.AddSingleton<JwtService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
+builder.Services.AddScoped<IBillingService, BillingService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -125,12 +132,17 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("ManagerOrAdmin", p => p.RequireRole("Admin", "Manager"));
 });
 
-// CORS
+// CORS — origins are configured via Cors:AllowedOrigins in appsettings.json or
+// environment variables (e.g. Cors__AllowedOrigins__0=https://yourapp.vercel.app)
+var corsOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>() ?? [];
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
+        policy.WithOrigins(corsOrigins)
               .AllowCredentials()
               .AllowAnyMethod()
               .AllowAnyHeader();
@@ -140,7 +152,9 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // Middleware
-if (!app.Environment.IsDevelopment())
+// UseHttpsRedirection is opt-in via config — disable when TLS is terminated
+// at the load balancer (Railway, Render, etc.) to avoid redirect loops.
+if (builder.Configuration.GetValue<bool>("UseHttpsRedirection"))
 {
     app.UseHttpsRedirection();
 }
@@ -159,8 +173,29 @@ app.MapHub<NotificationHub>("/hubs/notifications");
 
 // Seed Admin
 await SeedAdmin(app);
+await SeedReservedVendors(app);
 
 app.Run();
+
+static async Task SeedReservedVendors(WebApplication app)
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<MongoDbContext>();
+
+    var exists = await db.Vendors
+        .Find(v => v.Name == "Stock Adjustment" && v.IsReserved)
+        .AnyAsync();
+
+    if (!exists)
+    {
+        await db.Vendors.InsertOneAsync(new VendorModel
+        {
+            Name = "Stock Adjustment",
+            IsReserved = true,
+            Contacts = new List<ContactModel>()
+        });
+    }
+}
 
 static async Task SeedAdmin(WebApplication app)
 {

@@ -37,7 +37,7 @@ namespace PeralAPI.Models.Inventory
         [BsonElement("productId")]
         public string ProductId { get; set; } = null!;
         [BsonElement("totalQuantity")]
-        public int TotalQuantity { get; set; }
+        public double TotalQuantity { get; set; }
     }
 
     public static class ProductModelExtensions
@@ -98,20 +98,20 @@ namespace PeralAPI.Models.Inventory
             );
         }
 
-        public static ProductDto ToDto(this ProductModel model, List<VendorModel> vendorModels, int quantityInInventory)
+        public static ProductDto ToDto(this ProductModel model, List<VendorModel> vendorModels, double quantityInInventory, string? placedOrderId = null)
         {
             return new ProductDto(
                 model.Id,
-               model.Name,
+                model.Name,
                 vendorModels.Where(v => model.VendorIds.Contains(v.Id))
-                .Select(v =>
-                new VendorNameDto(v.Id, v.Name))
-                .ToList(),
+                    .Select(v => new VendorNameDto(v.Id, v.Name))
+                    .ToList(),
                 quantityInInventory,
                 model.MinQuantity,
                 model.Identifier,
                 model.ImageUrl,
-                model.SellingPrice
+                model.SellingPrice,
+                placedOrderId
             );
         }
     }

@@ -15,7 +15,9 @@ namespace PeralAPI.Models.Inventory
         [BsonElement("productId")]
         public string ProductId { get; set; } = null!;
         [BsonElement("quantity")]
-        public int Quantity { get; set; }
+        public double Quantity { get; set; }
+        [BsonElement("fillPercentage")]
+        public int? FillPercentage { get; set; }
         [BsonElement("transactionDate")]
         public DateTime TransactionDate { get; set; }
     }

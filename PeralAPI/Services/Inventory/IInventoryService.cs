@@ -29,7 +29,8 @@ namespace PeralAPI.Services.Inventory
         Task<ProductModel?> GetProductByIdAsync(string id);
         Task<List<ProductModel>> GetAllProductByIdsAsync(List<string> ids);
         Task<List<ProductModel>> GetProductByIdsAsync(List<string> ids);
-        Task<Dictionary<string, int>> GetProductStockByIdsAsync(List<string> ids);
+        Task<Dictionary<string, double>> GetProductStockByIdsAsync(List<string> ids);
+        Task<Dictionary<string, string>> GetPlacedOrderIdsByProductIdsAsync(List<string> productIds);
         #endregion
 
         #region Order Services
@@ -39,6 +40,11 @@ namespace PeralAPI.Services.Inventory
         Task<bool> DeleteInventoryOrderAsync(string id);
         Task<(List<InventoryOrderModel> Orders, long TotalCount)> SearchInventoryOrdersAsync(OrderSearchParamsDto searchParams, int page, int pageSize);
         Task<InventoryOrderModel?> GetInventoryOrderByIdAsync(string id);
+        #endregion
+
+        #region Inventory Manager Services
+        Task<List<StockCardDto>> GetAllStockCardsAsync();
+        Task<ConfirmStockAdjustmentResultDto> ConfirmStockAdjustmentAsync(ConfirmStockAdjustmentDto dto);
         #endregion
 
         #region Product Transaction Ledger Services

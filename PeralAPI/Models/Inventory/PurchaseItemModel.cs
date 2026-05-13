@@ -60,7 +60,7 @@ namespace PeralAPI.Models.Inventory
         [BsonElement("productId")]
         public string ProductId { get; set; } = null!;
         [BsonElement("quantity")]
-        public int Quantity { get; set; }
+        public double Quantity { get; set; }
         [BsonElement("purchaseValue")]
         [BsonRepresentation(BsonType.Decimal128)]
         public decimal PricePerItem { get; set; }

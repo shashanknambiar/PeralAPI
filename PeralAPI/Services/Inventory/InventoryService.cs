@@ -3,17 +3,19 @@ using MongoDB.Driver;
 using PeralAPI.Database;
 using PeralAPI.Models.DTOs;
 using PeralAPI.Models.Inventory;
-using StackExchange.Redis;
+using PeralAPI.Services;
 
 namespace PeralAPI.Services.Inventory
 {
     public class InventoryService : IInventoryService
     {
         private readonly MongoDbContext _db;
+        private readonly ICurrentUserService _currentUser;
 
-        public InventoryService(MongoDbContext db)
+        public InventoryService(MongoDbContext db, ICurrentUserService currentUser)
         {
             _db = db;
+            _currentUser = currentUser;
         }
 
         /*
@@ -81,8 +83,8 @@ namespace PeralAPI.Services.Inventory
         public async Task<List<VendorModel>> GetVendorsAsync(int page, int pageSize)
         {
             return await _db.Vendors
-                .Find(Builders<VendorModel>.Filter.Empty
-                & Builders<VendorModel>.Filter.Eq(v => v.IsDeleted, false))
+                .Find(Builders<VendorModel>.Filter.Eq(v => v.IsDeleted, false)
+                & Builders<VendorModel>.Filter.Ne(v => v.IsReserved, true))
                 .Skip((page - 1) * pageSize)
                 .Limit(pageSize)
                 .ToListAsync();
@@ -118,7 +120,8 @@ namespace PeralAPI.Services.Inventory
         {
             var regex = new BsonRegularExpression(query, "i");
             var filter = Builders<VendorModel>.Filter.Regex(v => v.Name, regex)
-                            & Builders<VendorModel>.Filter.Eq(v => v.IsDeleted, false);
+                            & Builders<VendorModel>.Filter.Eq(v => v.IsDeleted, false)
+                            & Builders<VendorModel>.Filter.Ne(v => v.IsReserved, true);
 
             return await _db.Vendors
                 .Find(filter)
@@ -215,12 +218,29 @@ namespace PeralAPI.Services.Inventory
                 .Find(Builders<ProductModel>.Filter.In(p => p.Id, ids))
                 .ToListAsync();
         }
-        public async Task<Dictionary<string, int>> GetProductStockByIdsAsync(List<string> ids)
+        public async Task<Dictionary<string, double>> GetProductStockByIdsAsync(List<string> ids)
         {
             var stockData = await _db.ProductQuantityView
                 .Find(Builders<ProductQuantityViewModel>.Filter.In(s => s.ProductId, ids))
                 .ToListAsync();
             return stockData.ToDictionary(s => s.ProductId, s => s.TotalQuantity);
+        }
+
+        public async Task<Dictionary<string, string>> GetPlacedOrderIdsByProductIdsAsync(List<string> productIds)
+        {
+            var placedOrders = await _db.InventoryOrders
+                .Find(Builders<InventoryOrderModel>.Filter.Eq(o => o.Status, InventoryOrderStatus.Placed))
+                .SortByDescending(o => o.OrderCreatedOn)
+                .ToListAsync();
+
+            // Orders are sorted newest-first; first match per product is the latest order.
+            var result = new Dictionary<string, string>();
+            foreach (var order in placedOrders)
+                foreach (var item in order.Products)
+                    if (productIds.Contains(item.ProductId) && !result.ContainsKey(item.ProductId))
+                        result[item.ProductId] = order.Id;
+
+            return result;
         }
         #endregion
 
@@ -269,9 +289,8 @@ namespace PeralAPI.Services.Inventory
                     {
                         ActionType = "Create",
                         TimeStamp = DateTime.UtcNow,
-                        PerformedBy = "",
+                        PerformedBy = _currentUser.UserName,
                         Remarks = dto.Remarks
-                        #warning Get user information for audit trail
                     }
                 }
             };
@@ -287,10 +306,13 @@ namespace PeralAPI.Services.Inventory
 
             ValidateInventoryOrderStatus(order.Status);
 
+            if (dto.Status == InventoryOrderStatus.RolledBack && order.Status != InventoryOrderStatus.Completed)
+                throw new Exception("Only completed orders can be rolled back.");
+
             ActionModel newAction = new()
             {
                 ActionType = $"Status change from {order.Status.ToString()} to {dto.Status.ToString()}",
-                PerformedBy = "",
+                PerformedBy = _currentUser.UserName,
                 TimeStamp = DateTime.UtcNow,
                 Remarks = dto.Remarks
             };
@@ -302,15 +324,19 @@ namespace PeralAPI.Services.Inventory
             {
                 update = update.Set(o => o.OrderClosedOn, DateTime.UtcNow);
             }
-            if(dto.Status == InventoryOrderStatus.Completed)
+            if (dto.Status == InventoryOrderStatus.Completed)
             {
                 modifiedCount = await ChangeOrderStatusToCompleted(order, update);
             }
+            else if (dto.Status == InventoryOrderStatus.RolledBack)
+            {
+                modifiedCount = await ChangeOrderStatusToRolledBack(order, update);
+            }
             else
             {
-               var result =  await _db.InventoryOrders.UpdateOneAsync(
-                Builders<InventoryOrderModel>.Filter.Eq(o => o.Id, dto.Id),
-                update);
+                var result = await _db.InventoryOrders.UpdateOneAsync(
+                    Builders<InventoryOrderModel>.Filter.Eq(o => o.Id, dto.Id),
+                    update);
                 modifiedCount = result.ModifiedCount;
             }
                 
@@ -365,6 +391,46 @@ namespace PeralAPI.Services.Inventory
 
         }
 
+        private async Task<long> ChangeOrderStatusToRolledBack(InventoryOrderModel order, UpdateDefinition<InventoryOrderModel> update)
+        {
+            // Negative ledger entries to reverse the stock added when the order was completed
+            var ledgerEntries = order.Products.Select(p => new ProductTransactionLedgerModel
+            {
+                ProductId = p.ProductId,
+                Quantity = -p.Quantity,
+                OrderId = order.Id,
+                OrderSource = "InventoryOrder",
+                TransactionDate = DateTime.UtcNow
+            }).ToList();
+
+            // Zero out payment fields
+            update = update
+                .Set(o => o.PaymentInformation.Value, (decimal)0)
+                .Set(o => o.PaymentInformation.AmountPaid, (decimal)0);
+
+            using var session = await _db.Client.StartSessionAsync();
+
+            try
+            {
+                session.StartTransaction();
+
+                await _db.ProductTransactionLedger.InsertManyAsync(session, ledgerEntries);
+
+                var result = await _db.InventoryOrders.UpdateOneAsync(
+                    session,
+                    Builders<InventoryOrderModel>.Filter.Eq(o => o.Id, order.Id),
+                    update);
+
+                await session.CommitTransactionAsync();
+                return result.ModifiedCount;
+            }
+            catch
+            {
+                await session.AbortTransactionAsync();
+                throw;
+            }
+        }
+
         public async Task<InventoryOrderModel> UpdateInventoryOrderAsync(UpdateInventoryOrderDto dto)
         {
             var order = await _db.InventoryOrders.Find(Builders<InventoryOrderModel>.Filter.Eq(o => o.Id, dto.Id)).FirstOrDefaultAsync();
@@ -387,8 +453,7 @@ namespace PeralAPI.Services.Inventory
             {
                 ActionType = "Update",
                 TimeStamp = DateTime.UtcNow,
-                PerformedBy = ""
-#warning Get user information for audit trail
+                PerformedBy = _currentUser.UserName
             });
             order.PaymentInformation = new PaymentInformationModel
             {
@@ -482,10 +547,140 @@ namespace PeralAPI.Services.Inventory
         private static void ValidateInventoryOrderStatus(InventoryOrderStatus status)
         {
             if (status == InventoryOrderStatus.Cancelled
-               || status == InventoryOrderStatus.RolledBack
-               || status == InventoryOrderStatus.Completed)
+               || status == InventoryOrderStatus.RolledBack)
                 throw new Exception("Order is locked. The order status cannot be changed.");
         }
+        #endregion
+
+        #region Inventory Manager Services
+
+        public async Task<List<StockCardDto>> GetAllStockCardsAsync()
+        {
+            var products = await _db.Products
+                .Find(Builders<ProductModel>.Filter.Eq(p => p.IsDeleted, false))
+                .SortBy(p => p.Name)
+                .ToListAsync();
+
+            if (products.Count == 0)
+                return [];
+
+            var productIds = products.Select(p => p.Id).ToList();
+            var quantityMapTask = GetProductStockByIdsAsync(productIds);
+            var lastAdjMapTask = GetLastStockAdjustmentsByProductIdsAsync(productIds);
+            var placedOrderMapTask = GetPlacedOrderIdsByProductIdsAsync(productIds);
+            await Task.WhenAll(quantityMapTask, lastAdjMapTask, placedOrderMapTask);
+            var quantityMap = quantityMapTask.Result;
+            var lastAdjMap = lastAdjMapTask.Result;
+            var placedOrderMap = placedOrderMapTask.Result;
+
+            return products.Select(p =>
+            {
+                quantityMap.TryGetValue(p.Id, out var totalQty);
+                lastAdjMap.TryGetValue(p.Id, out var lastAdj);
+                placedOrderMap.TryGetValue(p.Id, out var placedOrderId);
+                int fillPct = lastAdj?.FillPercentage ?? 100;
+
+                return new StockCardDto(
+                    p.Id,
+                    p.Name,
+                    p.Identifier,
+                    p.MinQuantity,
+                    p.ImageUrl,
+                    totalQty,
+                    fillPct,
+                    lastAdj?.TransactionDate,
+                    placedOrderId
+                );
+            }).ToList();
+        }
+
+        public async Task<ConfirmStockAdjustmentResultDto> ConfirmStockAdjustmentAsync(ConfirmStockAdjustmentDto dto)
+        {
+            var reservedVendor = await _db.Vendors
+                .Find(v => v.Name == "Stock Adjustment" && v.IsReserved && !v.IsDeleted)
+                .FirstOrDefaultAsync()
+                ?? throw new Exception("Stock Adjustment vendor not found. Please contact your administrator.");
+
+            var productIds = dto.Adjustments.Select(a => a.ProductId).ToList();
+            var lastAdjMap = await GetLastStockAdjustmentsByProductIdsAsync(productIds);
+
+            var orderProducts = new List<PurchaseItemModel>();
+            var ledgerEntries = new List<ProductTransactionLedgerModel>();
+            double totalConsumed = 0;
+
+            foreach (var item in dto.Adjustments)
+            {
+                lastAdjMap.TryGetValue(item.ProductId, out var lastAdj);
+                int prevFill = lastAdj?.FillPercentage ?? 100;
+                double delta = (item.NewFillPercentage - prevFill) / 100.0 - item.BoxesOpened;
+
+                if (delta == 0) continue;
+
+                if (delta < 0) totalConsumed += Math.Abs(delta);
+
+                orderProducts.Add(new PurchaseItemModel { ProductId = item.ProductId, Quantity = delta, PricePerItem = 0 });
+                ledgerEntries.Add(new ProductTransactionLedgerModel
+                {
+                    ProductId = item.ProductId,
+                    Quantity = delta,
+                    FillPercentage = item.NewFillPercentage,
+                    OrderSource = "StockAdjustment",
+                    TransactionDate = dto.CheckInDate
+                });
+            }
+
+            if (ledgerEntries.Count == 0)
+                return new ConfirmStockAdjustmentResultDto(0, 0, dto.CheckInDate);
+
+            using var session = await _db.Client.StartSessionAsync();
+            session.StartTransaction();
+            try
+            {
+                var order = new InventoryOrderModel
+                {
+                    VendorId = reservedVendor.Id,
+                    Products = orderProducts,
+                    Status = InventoryOrderStatus.Completed,
+                    OrderCreatedOn = dto.CheckInDate,
+                    OrderClosedOn = dto.CheckInDate,
+                    PaymentInformation = new PaymentInformationModel
+                    {
+                        Value = 0, AmountPaid = 0, PaymentMethod = string.Empty,
+                        AccountNumber = string.Empty, ReferenceNumber = string.Empty,
+                        PaymentDate = dto.CheckInDate
+                    },
+                    Actions = [new ActionModel { ActionType = "Stock Adjustment", TimeStamp = dto.CheckInDate, PerformedBy = _currentUser.UserName, Remarks = string.Empty }]
+                };
+                await _db.InventoryOrders.InsertOneAsync(session, order);
+
+                foreach (var entry in ledgerEntries)
+                    entry.OrderId = order.Id;
+
+                await _db.ProductTransactionLedger.InsertManyAsync(session, ledgerEntries);
+                await session.CommitTransactionAsync();
+            }
+            catch
+            {
+                await session.AbortTransactionAsync();
+                throw;
+            }
+
+            return new ConfirmStockAdjustmentResultDto(ledgerEntries.Count, Math.Round(totalConsumed, 2), dto.CheckInDate);
+        }
+
+        private async Task<Dictionary<string, ProductTransactionLedgerModel>> GetLastStockAdjustmentsByProductIdsAsync(List<string> productIds)
+        {
+            var entries = await _db.ProductTransactionLedger
+                .Find(Builders<ProductTransactionLedgerModel>.Filter.In(e => e.ProductId, productIds)
+                    & Builders<ProductTransactionLedgerModel>.Filter.Eq(e => e.OrderSource, "StockAdjustment"))
+                .SortByDescending(e => e.TransactionDate)
+                .ToListAsync();
+
+            return entries
+                .GroupBy(e => e.ProductId)
+                .ToDictionary(g => g.Key, g => g.First());
+        }
+
         #endregion
 
         /*

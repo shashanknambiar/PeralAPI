@@ -1,0 +1,27 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore PeralAPI/PeralAPI.csproj
+
+      - name: Build
+        run: dotnet build PeralAPI/PeralAPI.csproj --no-restore -c Release
+
+      - name: Docker build (smoke test)
+        run: docker build -t peralapi:ci .

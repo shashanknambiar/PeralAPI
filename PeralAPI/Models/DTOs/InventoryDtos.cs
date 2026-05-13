@@ -38,11 +38,12 @@ namespace PeralAPI.Models.DTOs
         string Id,
         string Name,
         List<VendorNameDto> Vendors,
-        int Quantity,
+        double Quantity,
         int MinQuantity,
         string? Identifier,
         string? ImageUrl,
-        int SellingPrice);
+        int SellingPrice,
+        string? PlacedOrderId = null);
     public record UpdateProductDto(
         string Id,
         string Name,
@@ -98,7 +99,7 @@ namespace PeralAPI.Models.DTOs
         byte[]? Attachment);
     public record PurchaseItemDto(string ProductId,
     string ProductName,
-    int Quantity,
+    double Quantity,
     decimal PricePerItem);
 
     public record ActionDto(string ActionType, DateTime ActionDate, string PerformedBy, string Remarks);

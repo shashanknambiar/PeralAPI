@@ -1,6 +1,7 @@
 ﻿using MongoDB.Bson;
 using MongoDB.Driver;
 using PeralAPI.Models;
+using PeralAPI.Models.Billing;
 using PeralAPI.Models.Inventory;
 
 namespace PeralAPI.Database
@@ -47,6 +48,9 @@ namespace PeralAPI.Database
     _database.GetCollection<ProductQuantityViewModel>("product_quantity_view");
         public IMongoCollection<VendorCreditViewModel> VendorCreditView =>
     _database.GetCollection<VendorCreditViewModel>("vendor_credit_view");
+
+        public IMongoCollection<BillingModel> Bills =>
+    _database.GetCollection<BillingModel>("bills");
 
         private void EnsureIndexes()
         {
@@ -133,7 +137,7 @@ namespace PeralAPI.Database
 
             var pipeline = new[]
             {
-        new BsonDocument("$match", new BsonDocument("status", 1)),
+        new BsonDocument("$match", new BsonDocument("status", 2)),
         new BsonDocument("$group", new BsonDocument
         {
             { "_id", "$vendorId" },

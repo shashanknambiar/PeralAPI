@@ -45,9 +45,11 @@ ipch/
 Thumbs.db
 desktop.ini
 
-# Secrets / local config
+# Secrets / local config — production values come from CI/CD environment variables
 appsettings.local.json
 appsettings.*.local.json
+appsettings.Production.json
+appsettings.Staging.json
 secrets.json
 *.pfx
 *.p12

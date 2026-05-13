@@ -74,7 +74,6 @@ namespace PeralAPI.Controllers.InventoryControllers
 
         [HttpGet("search")]
         [Authorize(Roles = "Inventory Manager, Billing")]
-
         public async Task<ActionResult<List<ProductDto>>> SearchProductsAsync(string searchString = "", [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
             var products = await _inventory.SearchProductAsync(searchString, page, pageSize);
@@ -82,36 +81,42 @@ namespace PeralAPI.Controllers.InventoryControllers
             var vendorIds = products.SelectMany(s => s.VendorIds).ToList();
             var vendorsTask = _inventory.GetVendorByIdAsync(vendorIds);
             var quantityTask = _inventory.GetProductStockByIdsAsync(productIds);
-            Task.WaitAll(vendorsTask, quantityTask);
+            var placedOrdersTask = _inventory.GetPlacedOrderIdsByProductIdsAsync(productIds);
+            await Task.WhenAll(vendorsTask, quantityTask, placedOrdersTask);
             var vendors = vendorsTask.Result;
             var quantity = quantityTask.Result;
+            var placedOrders = placedOrdersTask.Result;
             var productsDto = products.Select(p =>
             {
                 var resolvedVendors = vendors.Where(v => p.VendorIds.Contains(v.Id)).ToList();
                 quantity.TryGetValue(p.Id, out var stock);
-                return p.ToDto(resolvedVendors, stock);
+                placedOrders.TryGetValue(p.Id, out var placedOrderId);
+                return p.ToDto(resolvedVendors, stock, placedOrderId);
             }).ToList();
 
             return Ok(productsDto);
-
         }
+
         [HttpGet()]
         [Authorize(Roles = "Inventory Manager")]
         public async Task<ActionResult<List<ProductDto>>> GetProduct([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
             var products = await _inventory.SearchProductAsync("", page, pageSize);
             var productIds = products.Select(p => p.Id).ToList();
-            var vendorIds  = products.SelectMany(s => s.VendorIds).ToList();
-            var vendorsTask =  _inventory.GetVendorByIdAsync(vendorIds);
-            var quantityTask =  _inventory.GetProductStockByIdsAsync(productIds);
-            Task.WaitAll(vendorsTask, quantityTask);
+            var vendorIds = products.SelectMany(s => s.VendorIds).ToList();
+            var vendorsTask = _inventory.GetVendorByIdAsync(vendorIds);
+            var quantityTask = _inventory.GetProductStockByIdsAsync(productIds);
+            var placedOrdersTask = _inventory.GetPlacedOrderIdsByProductIdsAsync(productIds);
+            await Task.WhenAll(vendorsTask, quantityTask, placedOrdersTask);
             var vendors = vendorsTask.Result;
             var quantity = quantityTask.Result;
+            var placedOrders = placedOrdersTask.Result;
             var productsDto = products.Select(p =>
             {
                 var resolvedVendors = vendors.Where(v => p.VendorIds.Contains(v.Id)).ToList();
                 quantity.TryGetValue(p.Id, out var stock);
-                return p.ToDto(resolvedVendors, stock);
+                placedOrders.TryGetValue(p.Id, out var placedOrderId);
+                return p.ToDto(resolvedVendors, stock, placedOrderId);
             }).ToList();
 
             return Ok(productsDto);
@@ -124,10 +129,13 @@ namespace PeralAPI.Controllers.InventoryControllers
             var product = await _inventory.GetProductByIdAsync(id);
             if (product == null)
                 return NotFound("Product not found.");
-            var vendors = await _inventory.GetVendorByIdAsync(product.VendorIds);
-            var quantity = await _inventory.GetProductStockByIdsAsync(new List<string> { product.Id });
-            quantity.TryGetValue(product.Id, out var stock);
-            return Ok(product.ToDto(vendors, stock));
+            var vendorsTask = _inventory.GetVendorByIdAsync(product.VendorIds);
+            var quantityTask = _inventory.GetProductStockByIdsAsync(new List<string> { product.Id });
+            var placedOrdersTask = _inventory.GetPlacedOrderIdsByProductIdsAsync(new List<string> { product.Id });
+            await Task.WhenAll(vendorsTask, quantityTask, placedOrdersTask);
+            quantityTask.Result.TryGetValue(product.Id, out var stock);
+            placedOrdersTask.Result.TryGetValue(product.Id, out var placedOrderId);
+            return Ok(product.ToDto(vendorsTask.Result, stock, placedOrderId));
         }
 
     }
