@@ -199,6 +199,10 @@ static async Task SeedReservedVendors(WebApplication app)
 
 static async Task SeedAdmin(WebApplication app)
 {
+    var adminPassword = app.Configuration["Seed:AdminPassword"];
+    if (string.IsNullOrWhiteSpace(adminPassword))
+        throw new InvalidOperationException("Seed:AdminPassword is not configured.");
+
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<MongoDbContext>();
 
@@ -212,7 +216,7 @@ static async Task SeedAdmin(WebApplication app)
         {
             UserName = "Admin",
             Email = "admin@local.app",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin1234"),
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPassword),
             Roles = new List<string> { "Admin" },
             IsActive = true,
             AvatarUrl = "https://heroui-assets.nyc3.cdn.digitaloceanspaces.com/avatars/orange.jpg"
