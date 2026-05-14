@@ -36,9 +36,9 @@ namespace PeralAPI.Controllers.InventoryControllers
                 var result = await _inventory.ConfirmStockAdjustmentAsync(dto);
                 return Ok(result);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return StatusCode(500, ex.Message);
+                return StatusCode(500, "An internal error occurred.");
             }
         }
     }

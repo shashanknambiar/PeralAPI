@@ -4,6 +4,9 @@
     using PeralAPI.Database;
     using PeralAPI.Models;
     using PeralAPI.Models.DTOs;
+    using System.Security.Cryptography;
+    using System.Text;
+
     public class AuthService
     {
         private readonly MongoDbContext _db;
@@ -23,19 +26,19 @@
                 .Find(u => u.UserName == dto.UserName && u.IsActive)
                 .FirstOrDefaultAsync();
 
-            if (user == null)
-                return (null, "User not found.");
-
-            if (!BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
-                return (null, "Incorrect password.");
+            // Use constant-time comparison path even for unknown users to prevent timing enumeration
+            var hash = user?.PasswordHash ?? BCrypt.Net.BCrypt.HashPassword("dummy");
+            if (user == null || !BCrypt.Net.BCrypt.Verify(dto.Password, hash))
+                return (null, "Invalid username or password.");
 
             return (await IssueTokensAsync(user), string.Empty);
         }
 
         public async Task<AuthResponseDto?> RefreshAsync(string refreshToken)
         {
+            var tokenHash = HashToken(refreshToken);
             var stored = await _db.RefreshTokens
-                .Find(r => r.Token == refreshToken)
+                .Find(r => r.Token == tokenHash)
                 .FirstOrDefaultAsync();
 
             if (stored == null || !stored.IsActive) return null;
@@ -56,8 +59,9 @@
 
         public async Task<bool> RevokeAsync(string refreshToken)
         {
+            var tokenHash = HashToken(refreshToken);
             var result = await _db.RefreshTokens.UpdateOneAsync(
-                r => r.Token == refreshToken && r.RevokedAt == null,
+                r => r.Token == tokenHash && r.RevokedAt == null,
                 Builders<RefreshToken>.Update.Set(r => r.RevokedAt, DateTime.UtcNow));
 
             return result.ModifiedCount > 0;
@@ -71,12 +75,15 @@
             await _db.RefreshTokens.InsertOneAsync(new RefreshToken
             {
                 UserId = user.Id,
-                Token = refreshToken,
+                Token = HashToken(refreshToken),
                 ExpiresAt = DateTime.UtcNow.AddDays(
                     int.Parse(_config["Jwt:RefreshTokenExpiryDays"]!))
             });
 
             return new AuthResponseDto(accessToken, refreshToken, user.Id, user.UserName, user.AvatarUrl, user.Roles);
         }
+
+        private static string HashToken(string token) =>
+            Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
     }
 }

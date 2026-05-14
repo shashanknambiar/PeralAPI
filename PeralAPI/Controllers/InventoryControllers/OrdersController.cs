@@ -6,6 +6,7 @@ using PeralAPI.Services.Inventory;
 
 namespace PeralAPI.Controllers.InventoryControllers
 {
+    [ApiController]
     [Route("api/inventory/orders")]
     [Tags("Orders")]
     [Authorize]

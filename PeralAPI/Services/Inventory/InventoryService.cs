@@ -4,6 +4,7 @@ using PeralAPI.Database;
 using PeralAPI.Models.DTOs;
 using PeralAPI.Models.Inventory;
 using PeralAPI.Services;
+using System.Text.RegularExpressions;
 
 namespace PeralAPI.Services.Inventory
 {
@@ -118,7 +119,7 @@ namespace PeralAPI.Services.Inventory
         }
         public async Task<List<VendorModel>> SearchVendorsAsync(string query, int page, int pageSize)
         {
-            var regex = new BsonRegularExpression(query, "i");
+            var regex = new BsonRegularExpression(Regex.Escape(query), "i");
             var filter = Builders<VendorModel>.Filter.Regex(v => v.Name, regex)
                             & Builders<VendorModel>.Filter.Eq(v => v.IsDeleted, false)
                             & Builders<VendorModel>.Filter.Ne(v => v.IsReserved, true);
@@ -190,7 +191,7 @@ namespace PeralAPI.Services.Inventory
             }
             else
             {
-                var regex = new BsonRegularExpression(query, "i");
+                var regex = new BsonRegularExpression(Regex.Escape(query), "i");
                 filter = Builders<ProductModel>.Filter.Regex(p => p.Name, regex) & Builders<ProductModel>.Filter.Eq(p => p.IsDeleted, false);
             }
 
@@ -271,7 +272,7 @@ namespace PeralAPI.Services.Inventory
                     PricePerItem = i.PricePerItem
                 }).ToList(),
                 Status =  dto.IsPlaced ? InventoryOrderStatus.Placed  : InventoryOrderStatus.Draft,
-                OrderCreatedOn = DateTime.Now,
+                OrderCreatedOn = DateTime.UtcNow,
                 OrderClosedOn = DateTime.MinValue,
                 PaymentInformation = new PaymentInformationModel
                 {
@@ -477,13 +478,13 @@ namespace PeralAPI.Services.Inventory
 
             if (!string.IsNullOrWhiteSpace(searchParams.OrderId))
             {
-                var regex = new BsonRegularExpression(searchParams.OrderId, "i");
+                var regex = new BsonRegularExpression(Regex.Escape(searchParams.OrderId), "i");
                 filters.Add(Builders<InventoryOrderModel>.Filter.Regex(o => o.Id, regex));
             }
 
             if (!string.IsNullOrWhiteSpace(searchParams.VendorName))
             {
-                var vendorRegex = new BsonRegularExpression(searchParams.VendorName, "i");
+                var vendorRegex = new BsonRegularExpression(Regex.Escape(searchParams.VendorName), "i");
                 var matchingVendorIds = await _db.Vendors
                     .Find(Builders<VendorModel>.Filter.Regex(v => v.Name, vendorRegex)
                         & Builders<VendorModel>.Filter.Eq(v => v.IsDeleted, false))

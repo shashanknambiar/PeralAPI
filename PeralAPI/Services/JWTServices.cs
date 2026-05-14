@@ -48,7 +48,7 @@
             return Convert.ToBase64String(bytes);
         }
 
-        public ClaimsPrincipal? ValidateAccessToken(string token)
+        public ClaimsPrincipal? ExtractClaimsFromExpiredToken(string token)
         {
             var key = new SymmetricSecurityKey(
                 Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
@@ -61,7 +61,7 @@
                         ValidateIssuer = true,
                         ValidateAudience = true,
                         ValidateIssuerSigningKey = true,
-                        ValidateLifetime = false, // Allow expired — refresh flow handles this
+                        ValidateLifetime = false,
                         ValidIssuer = _config["Jwt:Issuer"],
                         ValidAudience = _config["Jwt:Audience"],
                         IssuerSigningKey = key

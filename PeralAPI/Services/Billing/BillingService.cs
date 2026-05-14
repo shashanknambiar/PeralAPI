@@ -2,6 +2,7 @@ using MongoDB.Driver;
 using PeralAPI.Database;
 using PeralAPI.Models.Billing;
 using PeralAPI.Models.DTOs;
+using System.Text.RegularExpressions;
 
 namespace PeralAPI.Services.Billing
 {
@@ -62,15 +63,15 @@ namespace PeralAPI.Services.Billing
 
             if (!string.IsNullOrWhiteSpace(searchParams.PatientName))
                 filter &= builder.Regex(b => b.PatientName,
-                    new MongoDB.Bson.BsonRegularExpression(searchParams.PatientName, "i"));
+                    new MongoDB.Bson.BsonRegularExpression(Regex.Escape(searchParams.PatientName), "i"));
 
             if (!string.IsNullOrWhiteSpace(searchParams.PatientPhoneNumber))
                 filter &= builder.Regex(b => b.PatientPhoneNumber,
-                    new MongoDB.Bson.BsonRegularExpression(searchParams.PatientPhoneNumber, "i"));
+                    new MongoDB.Bson.BsonRegularExpression(Regex.Escape(searchParams.PatientPhoneNumber), "i"));
 
             if (!string.IsNullOrWhiteSpace(searchParams.DoctorName))
                 filter &= builder.Regex(b => b.DoctorName,
-                    new MongoDB.Bson.BsonRegularExpression(searchParams.DoctorName, "i"));
+                    new MongoDB.Bson.BsonRegularExpression(Regex.Escape(searchParams.DoctorName), "i"));
 
             if (searchParams.FromDate.HasValue)
                 filter &= builder.Gte(b => b.BillDate, searchParams.FromDate.Value);

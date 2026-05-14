@@ -17,4 +17,7 @@ COPY --from=build /app/publish .
 ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
 
+RUN adduser --disabled-password --gecos "" appuser
+USER appuser
+
 ENTRYPOINT ["dotnet", "PeralAPI.dll"]

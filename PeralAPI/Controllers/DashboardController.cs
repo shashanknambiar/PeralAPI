@@ -5,6 +5,7 @@ using PeralAPI.Services.Dashboard;
 
 namespace PeralAPI.Controllers
 {
+    [ApiController]
     [Route("api/dashboard")]
     [Tags("Dashboard")]
     [Authorize(Roles = "Admin,Inventory Manager")]

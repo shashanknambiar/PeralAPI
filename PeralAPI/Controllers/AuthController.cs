@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using PeralAPI.Models.DTOs;
 using PeralAPI.Services;
 
@@ -12,6 +13,7 @@ namespace PeralAPI.Controllers
         private readonly AuthService _auth;
         public AuthController(AuthService auth) => _auth = auth;
 
+        [EnableRateLimiting("auth")]
         [HttpPost("login")]
         public async Task<ActionResult<AuthResponseDto>> Login(LoginDto dto)
         {
@@ -20,6 +22,7 @@ namespace PeralAPI.Controllers
             return Ok(result);
         }
 
+        [EnableRateLimiting("auth")]
         [HttpPost("refresh")]
         public async Task<ActionResult<AuthResponseDto>> Refresh(RefreshTokenDto dto)
         {

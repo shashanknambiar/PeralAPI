@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
@@ -14,6 +15,7 @@ using PeralAPI.Services.Inventory;
 using StackExchange.Redis;
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -91,7 +93,11 @@ else
 }
 
 // JWT Auth
-var jwtKey = builder.Configuration["Jwt:Key"]!;
+var jwtKey = builder.Configuration["Jwt:Key"] ?? string.Empty;
+if (jwtKey.Length < 32)
+    throw new InvalidOperationException(
+        "Jwt:Key must be at least 32 characters. Set it via the Jwt__Key environment variable.");
+
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -132,6 +138,19 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("ManagerOrAdmin", p => p.RequireRole("Admin", "Manager"));
 });
 
+// Rate limiting — applied to auth endpoints via [EnableRateLimiting("auth")]
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("auth", opt =>
+    {
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.PermitLimit = 10;
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit = 0;
+    });
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
+
 // CORS — origins are configured via Cors:AllowedOrigins in appsettings.json or
 // environment variables (e.g. Cors__AllowedOrigins__0=https://yourapp.vercel.app)
 var corsOrigins = builder.Configuration
@@ -159,10 +178,22 @@ if (builder.Configuration.GetValue<bool>("UseHttpsRedirection"))
     app.UseHttpsRedirection();
 }
 
-app.UseCors("AllowReactApp");
+app.Use(async (ctx, next) =>
+{
+    ctx.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+    ctx.Response.Headers.Append("X-Frame-Options", "DENY");
+    ctx.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
+    await next();
+});
 
-app.UseSwagger();
-app.UseSwaggerUI();
+app.UseCors("AllowReactApp");
+app.UseRateLimiter();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();

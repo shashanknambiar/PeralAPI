@@ -26,7 +26,7 @@
 
         public async Task<(bool Success, string Error)> AssignRoleAsync(string userId, string role)
         {
-            var validRoles = new[] { "Admin", "Manager", "User" };
+            var validRoles = new[] { "Admin", "Manager", "User", "Billing", "Inventory Manager" };
             if (!validRoles.Contains(role))
                 return (false, $"Invalid role. Valid roles: {string.Join(", ", validRoles)}");
 
