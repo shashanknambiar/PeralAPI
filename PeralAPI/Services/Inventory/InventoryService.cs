@@ -229,8 +229,10 @@ namespace PeralAPI.Services.Inventory
 
         public async Task<Dictionary<string, string>> GetPlacedOrderIdsByProductIdsAsync(List<string> productIds)
         {
+            var activeStatusFilter = Builders<InventoryOrderModel>.Filter.In(o => o.Status,
+                new[] { InventoryOrderStatus.Placed, InventoryOrderStatus.Received });
             var placedOrders = await _db.InventoryOrders
-                .Find(Builders<InventoryOrderModel>.Filter.Eq(o => o.Status, InventoryOrderStatus.Placed))
+                .Find(activeStatusFilter)
                 .SortByDescending(o => o.OrderCreatedOn)
                 .ToListAsync();
 
@@ -307,8 +309,10 @@ namespace PeralAPI.Services.Inventory
 
             ValidateInventoryOrderStatus(order.Status);
 
-            if (dto.Status == InventoryOrderStatus.RolledBack && order.Status != InventoryOrderStatus.Completed)
-                throw new Exception("Only completed orders can be rolled back.");
+            if (dto.Status == InventoryOrderStatus.RolledBack
+                && order.Status != InventoryOrderStatus.Received
+                && order.Status != InventoryOrderStatus.Completed)
+                throw new Exception("Only Received or Completed orders can be rolled back.");
 
             ActionModel newAction = new()
             {
@@ -325,9 +329,17 @@ namespace PeralAPI.Services.Inventory
             {
                 update = update.Set(o => o.OrderClosedOn, DateTime.UtcNow);
             }
-            if (dto.Status == InventoryOrderStatus.Completed)
+            if (dto.Status == InventoryOrderStatus.Received && dto.CreditExpiryDate.HasValue)
             {
-                modifiedCount = await ChangeOrderStatusToCompleted(order, update);
+                update = update.Set(o => o.CreditExpiryDate, dto.CreditExpiryDate.Value.ToUniversalTime());
+            }
+            if (dto.Status == InventoryOrderStatus.Placed)
+            {
+                modifiedCount = await ChangeOrderStatusToPlaced(order, update);
+            }
+            else if (dto.Status == InventoryOrderStatus.Received)
+            {
+                modifiedCount = await ChangeOrderStatusToReceived(order, update);
             }
             else if (dto.Status == InventoryOrderStatus.RolledBack)
             {
@@ -351,10 +363,16 @@ namespace PeralAPI.Services.Inventory
             }
         }
 
-        private async Task<long> ChangeOrderStatusToCompleted(InventoryOrderModel order, UpdateDefinition<InventoryOrderModel> update)
+        private async Task<long> ChangeOrderStatusToPlaced(InventoryOrderModel order, UpdateDefinition<InventoryOrderModel> update)
         {
-           
-            // Build ledger entries from order products
+            var result = await _db.InventoryOrders.UpdateOneAsync(
+                Builders<InventoryOrderModel>.Filter.Eq(o => o.Id, order.Id),
+                update);
+            return result.ModifiedCount;
+        }
+
+        private async Task<long> ChangeOrderStatusToReceived(InventoryOrderModel order, UpdateDefinition<InventoryOrderModel> update)
+        {
             var ledgerEntries = order.Products.Select(p => new ProductTransactionLedgerModel
             {
                 ProductId = p.ProductId,
@@ -364,17 +382,14 @@ namespace PeralAPI.Services.Inventory
                 TransactionDate = DateTime.UtcNow
             }).ToList();
 
-            // Start a session for the transaction
             using var session = await _db.Client.StartSessionAsync();
 
             try
             {
                 session.StartTransaction();
 
-                // 1. Insert ledger entries first (financial record is source of truth)
                 await _db.ProductTransactionLedger.InsertManyAsync(session, ledgerEntries);
 
-                // 2. Mark order as completed
                 var result = await _db.InventoryOrders.UpdateOneAsync(
                     session,
                     Builders<InventoryOrderModel>.Filter.Eq(o => o.Id, order.Id),
@@ -388,8 +403,6 @@ namespace PeralAPI.Services.Inventory
                 await session.AbortTransactionAsync();
                 throw;
             }
-
-
         }
 
         private async Task<long> ChangeOrderStatusToRolledBack(InventoryOrderModel order, UpdateDefinition<InventoryOrderModel> update)

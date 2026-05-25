@@ -73,7 +73,8 @@ namespace PeralAPI.Models.DTOs
         InventoryOrderStatus Status,
         PaymentInformationDto PaymentInformation,
         DateTime OrderCreatedOn,
-        DateTime OrderClosedOn
+        DateTime OrderClosedOn,
+        DateTime? CreditExpiryDate
     );
     public record CreateInventoryOrderDto(
         string VendorId,
@@ -87,7 +88,7 @@ namespace PeralAPI.Models.DTOs
         List<ProductIdAndQuantity> ProductInfos,
         PaymentInformationDto PaymentInformation,
         string Remarks);
-    public record ChangeInventoryOrderStatusDto(string Id, InventoryOrderStatus Status, string Remarks);
+    public record ChangeInventoryOrderStatusDto(string Id, InventoryOrderStatus Status, string Remarks, DateTime? CreditExpiryDate = null);
     public record ProductIdAndQuantity(string ProductId, int Quantity, decimal PricePerItem);
     public record PaymentInformationDto(
         decimal Value,

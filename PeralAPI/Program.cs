@@ -68,6 +68,7 @@ builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
+builder.Services.AddHostedService<CreditExpiryReminderService>();
 builder.Services.AddScoped<IBillingService, BillingService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddControllers()

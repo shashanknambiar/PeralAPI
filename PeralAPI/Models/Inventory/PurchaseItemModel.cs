@@ -6,11 +6,12 @@ namespace PeralAPI.Models.Inventory
 {
     public enum InventoryOrderStatus
     {
-        Draft,
-        Placed,
-        Completed,
-        Cancelled,
-        RolledBack
+        Draft = 0,
+        Placed = 1,
+        Completed = 2,
+        Cancelled = 3,
+        RolledBack = 4,
+        Received = 5
     }
     public class InventoryOrderModel
     {
@@ -31,6 +32,10 @@ namespace PeralAPI.Models.Inventory
         public DateTime OrderCreatedOn { get; set; }
         [BsonElement("OrderClosedOn")]
         public DateTime OrderClosedOn { get; set; } = DateTime.MinValue;
+        [BsonElement("creditExpiryDate")]
+        public DateTime? CreditExpiryDate { get; set; }
+        [BsonElement("creditExpiryReminderSentAt")]
+        public DateTime? CreditExpiryReminderSentAt { get; set; }
     }
 
     public class PaymentInformationModel
@@ -83,14 +88,15 @@ namespace PeralAPI.Models.Inventory
         public static InventoryOrderDto ToDto(this InventoryOrderModel model, VendorDto Vendor, List<PurchaseItemDto> Products)
         {
             return new InventoryOrderDto(
-                model.Id, 
-                Vendor, 
-                Products, 
+                model.Id,
+                Vendor,
+                Products,
                 model.Actions.Select(s => s.ToDto()).ToList(),
                 model.Status,
-                model.PaymentInformation.ToDto(), 
-                model.OrderCreatedOn, 
-                model.OrderClosedOn);
+                model.PaymentInformation.ToDto(),
+                model.OrderCreatedOn,
+                model.OrderClosedOn,
+                model.CreditExpiryDate);
         }
 
         public static PaymentInformationDto ToDto(this PaymentInformationModel model)
