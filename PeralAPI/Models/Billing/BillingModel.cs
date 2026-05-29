@@ -31,6 +31,9 @@ namespace PeralAPI.Models.Billing
         [BsonElement("products")]
         public List<BillingProductItem> Products { get; set; } = new();
 
+        [BsonElement("services")]
+        public List<BillingServiceItem> Services { get; set; } = new();
+
         [BsonElement("discountInPercent")]
         public double DiscountInPercent { get; set; }
 
@@ -50,6 +53,15 @@ namespace PeralAPI.Models.Billing
         public decimal PricePerItem { get; set; }
     }
 
+    public class BillingServiceItem
+    {
+        [BsonElement("serviceId")]
+        public string ServiceId { get; set; } = null!;
+
+        [BsonElement("price")]
+        public decimal Price { get; set; }
+    }
+
     public static class BillingModelExtensions
     {
         public static BillingModel ToModel(this CreateBillDto dto) => new()
@@ -66,26 +78,39 @@ namespace PeralAPI.Models.Billing
                 Quantity = p.Quantity,
                 PricePerItem = p.PricePerItem,
             }).ToList(),
+            Services = (dto.Services ?? new()).Select(s => new BillingServiceItem
+            {
+                ServiceId = s.ServiceId,
+                Price = s.Price,
+            }).ToList(),
             DiscountInPercent = dto.DiscountInPercent,
             BillTotal = dto.BillTotal,
         };
 
-        public static BillDto ToDto(this BillingModel model, Dictionary<string, string> productNames) => new(
-            model.Id,
-            model.PatientName,
-            model.BillDate,
-            model.PatientPhoneNumber,
-            model.Age,
-            model.Gender,
-            model.DoctorName,
-            model.Products.Select(p => new BillProductItemDto(
-                p.ProductId,
-                productNames.TryGetValue(p.ProductId, out var name) ? name : p.ProductId,
-                p.Quantity,
-                p.PricePerItem
-            )).ToList(),
-            model.DiscountInPercent,
-            model.BillTotal
-        );
+        public static BillDto ToDto(
+            this BillingModel model,
+            Dictionary<string, string> productNames,
+            Dictionary<string, string> serviceNames) => new(
+                model.Id,
+                model.PatientName,
+                model.BillDate,
+                model.PatientPhoneNumber,
+                model.Age,
+                model.Gender,
+                model.DoctorName,
+                model.Products.Select(p => new BillProductItemDto(
+                    p.ProductId,
+                    productNames.TryGetValue(p.ProductId, out var pName) ? pName : p.ProductId,
+                    p.Quantity,
+                    p.PricePerItem
+                )).ToList(),
+                model.Services.Select(s => new BillServiceItemDto(
+                    s.ServiceId,
+                    serviceNames.TryGetValue(s.ServiceId, out var sName) ? sName : s.ServiceId,
+                    s.Price
+                )).ToList(),
+                model.DiscountInPercent,
+                model.BillTotal
+            );
     }
 }

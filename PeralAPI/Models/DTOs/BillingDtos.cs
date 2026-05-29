@@ -1,5 +1,39 @@
 namespace PeralAPI.Models.DTOs
 {
+    // ── Service catalog ───────────────────────────────────────────────────────
+
+    public record ServiceDto(
+        string Id,
+        string Name,
+        decimal Price
+    );
+
+    public record CreateServiceDto(
+        string Name,
+        decimal Price
+    );
+
+    public record UpdateServiceDto(
+        string Id,
+        string Name,
+        decimal Price
+    );
+
+    // ── Bill service line items ───────────────────────────────────────────────
+
+    public record BillServiceItemDto(
+        string ServiceId,
+        string ServiceName,
+        decimal Price
+    );
+
+    public record BillServiceInputDto(
+        string ServiceId,
+        decimal Price
+    );
+
+    // ── Bills ─────────────────────────────────────────────────────────────────
+
     public record BillDto(
         string Id,
         string PatientName,
@@ -9,6 +43,7 @@ namespace PeralAPI.Models.DTOs
         string Gender,
         string DoctorName,
         List<BillProductItemDto> Products,
+        List<BillServiceItemDto> Services,
         double DiscountInPercent,
         double BillTotal
     );
@@ -28,6 +63,7 @@ namespace PeralAPI.Models.DTOs
         string Gender,
         string DoctorName,
         List<BillProductInputDto> Products,
+        List<BillServiceInputDto>? Services,
         double DiscountInPercent,
         double BillTotal
     );
@@ -41,6 +77,7 @@ namespace PeralAPI.Models.DTOs
         string Gender,
         string DoctorName,
         List<BillProductInputDto> Products,
+        List<BillServiceInputDto>? Services,
         double DiscountInPercent,
         double BillTotal
     );

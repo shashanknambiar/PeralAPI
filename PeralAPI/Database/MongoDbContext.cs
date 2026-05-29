@@ -52,6 +52,9 @@ namespace PeralAPI.Database
         public IMongoCollection<BillingModel> Bills =>
     _database.GetCollection<BillingModel>("bills");
 
+        public IMongoCollection<ServiceModel> Services =>
+    _database.GetCollection<ServiceModel>("services");
+
         private void EnsureIndexes()
         {
             // Unique index on username and email

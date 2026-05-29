@@ -15,19 +15,21 @@ namespace PeralAPI.Controllers
     {
         private readonly IBillingService _billing;
         private readonly IInventoryService _inventory;
+        private readonly IServicesService _services;
 
-        public BillingController(IBillingService billing, IInventoryService inventory)
+        public BillingController(IBillingService billing, IInventoryService inventory, IServicesService services)
         {
             _billing = billing;
             _inventory = inventory;
+            _services = services;
         }
 
         [HttpPost]
         public async Task<ActionResult<BillDto>> CreateBill([FromBody] CreateBillDto dto)
         {
             var bill = await _billing.CreateBillAsync(dto);
-            var productNames = await ResolveProductNamesAsync(bill);
-            return Ok(bill.ToDto(productNames));
+            var (productNames, serviceNames) = await ResolveNamesAsync(bill);
+            return Ok(bill.ToDto(productNames, serviceNames));
         }
 
         [HttpPut("{id}")]
@@ -40,8 +42,8 @@ namespace PeralAPI.Controllers
             if (bill == null)
                 return NotFound("Bill not found.");
 
-            var productNames = await ResolveProductNamesAsync(bill);
-            return Ok(bill.ToDto(productNames));
+            var (productNames, serviceNames) = await ResolveNamesAsync(bill);
+            return Ok(bill.ToDto(productNames, serviceNames));
         }
 
         [HttpDelete("{id}")]
@@ -60,8 +62,8 @@ namespace PeralAPI.Controllers
             if (bill == null)
                 return NotFound("Bill not found.");
 
-            var productNames = await ResolveProductNamesAsync(bill);
-            return Ok(bill.ToDto(productNames));
+            var (productNames, serviceNames) = await ResolveNamesAsync(bill);
+            return Ok(bill.ToDto(productNames, serviceNames));
         }
 
         [HttpGet("search")]
@@ -81,21 +83,37 @@ namespace PeralAPI.Controllers
             var billDtos = new List<BillDto>();
             foreach (var bill in bills)
             {
-                var productNames = await ResolveProductNamesAsync(bill);
-                billDtos.Add(bill.ToDto(productNames));
+                var (productNames, serviceNames) = await ResolveNamesAsync(bill);
+                billDtos.Add(bill.ToDto(productNames, serviceNames));
             }
 
             return Ok(new BillSearchResultDto(page, totalPages, billDtos));
         }
 
+        // ── helpers ────────────────────────────────────────────────────────────
+
+        private async Task<(Dictionary<string, string> productNames, Dictionary<string, string> serviceNames)>
+            ResolveNamesAsync(BillingModel bill)
+        {
+            var productIdsTask = ResolveProductNamesAsync(bill);
+            var serviceIdsTask = ResolveServiceNamesAsync(bill);
+            await Task.WhenAll(productIdsTask, serviceIdsTask);
+            return (productIdsTask.Result, serviceIdsTask.Result);
+        }
+
         private async Task<Dictionary<string, string>> ResolveProductNamesAsync(BillingModel bill)
         {
             var productIds = bill.Products.Select(p => p.ProductId).ToList();
-            if (productIds.Count == 0)
-                return new Dictionary<string, string>();
-
+            if (productIds.Count == 0) return new Dictionary<string, string>();
             var products = await _inventory.GetAllProductByIdsAsync(productIds);
             return products.ToDictionary(p => p.Id, p => p.Name);
+        }
+
+        private async Task<Dictionary<string, string>> ResolveServiceNamesAsync(BillingModel bill)
+        {
+            var serviceIds = bill.Services.Select(s => s.ServiceId).ToList();
+            if (serviceIds.Count == 0) return new Dictionary<string, string>();
+            return await _services.GetServiceNamesByIdsAsync(serviceIds);
         }
     }
 }

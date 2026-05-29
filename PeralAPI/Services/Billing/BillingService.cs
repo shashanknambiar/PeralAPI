@@ -38,6 +38,11 @@ namespace PeralAPI.Services.Billing
                     Quantity = p.Quantity,
                     PricePerItem = p.PricePerItem,
                 }).ToList())
+                .Set(b => b.Services, (dto.Services ?? new()).Select(s => new BillingServiceItem
+                {
+                    ServiceId = s.ServiceId,
+                    Price = s.Price,
+                }).ToList())
                 .Set(b => b.DiscountInPercent, dto.DiscountInPercent)
                 .Set(b => b.BillTotal, dto.BillTotal);
 

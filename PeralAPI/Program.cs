@@ -10,6 +10,7 @@ using PeralAPI.Models;
 using PeralAPI.Models.Inventory;
 using PeralAPI.Services;
 using PeralAPI.Services.Billing;
+using PeralAPI.Models.Billing;
 using PeralAPI.Services.Dashboard;
 using PeralAPI.Services.Inventory;
 using StackExchange.Redis;
@@ -70,6 +71,7 @@ builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddHostedService<CreditExpiryReminderService>();
 builder.Services.AddScoped<IBillingService, BillingService>();
+builder.Services.AddScoped<IServicesService, ServicesService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
